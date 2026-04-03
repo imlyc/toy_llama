@@ -11,24 +11,17 @@ std::string ChatEngine::SendMessage(const std::string& message) {
   std::vector<Token> input_tokens = tokenizer_.TextToToken(message);
   std::vector<Token> output_tokens;
 
-  transformer_.Prefill(input_tokens);
+  std::vector<float> logits = transformer_.Prefill(input_tokens);
 
-  Token next_token = NextToken(Token::BOS);
+  Token next_token = sampler_.Pick(logits);
   while (next_token != Token::EOS) {
     output_tokens.push_back(next_token);
-    next_token = NextToken(next_token);
+
+    logits = transformer_.Predict(next_token);
+    next_token = sampler_.Pick(logits);
   }
 
   return tokenizer_.TokenToText(output_tokens);
-}
-
-Token ChatEngine::NextToken(Token token) {
-  if (token == Token::EOS) {
-    return token;
-  }
-
-  std::vector<float> logits = transformer_.Predict(token);
-  return sampler_.Pick(logits);
 }
 
 }  // namespace tlm

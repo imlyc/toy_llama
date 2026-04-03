@@ -18,8 +18,6 @@ class ChatEngine {
   std::string SendMessage(const std::string& message);
 
  private:
-  Token NextToken(Token token);
-
   Tokenizer tokenizer_;
   Transformer transformer_;
   Sampler sampler_;
