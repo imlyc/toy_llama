@@ -3,6 +3,10 @@
 #include <string>
 
 #include "model.h"
+#include "sampler.h"
+#include "token.h"
+#include "tokenizer.h"
+#include "transformer.h"
 
 namespace tlm {
 
@@ -17,7 +21,7 @@ class ChatEngine {
   Token NextToken(Token token);
 
   Tokenizer tokenizer_;
-  Transformer transfomer_;
+  Transformer transformer_;
   Sampler sampler_;
 };
 

@@ -19,6 +19,9 @@ add_executable(toy_llama
   chat_engine.cc
   model.cc
   model_loader.cc
+  sampler.cc
+  tokenizer.cc
+  transformer.cc
 )
 
 target_link_libraries(toy_llama PRIVATE
