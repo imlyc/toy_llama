@@ -13,6 +13,9 @@ find_package(glog REQUIRED)
 # Allow sub folder to use absolute path for include
 include_directories(${CMAKE_SOURCE_DIR})
 
+add_subdirectory(base)
+add_subdirectory(gguf)
+
 add_executable(toy_llama
   main.cc
 
@@ -25,5 +28,7 @@ add_executable(toy_llama
 )
 
 target_link_libraries(toy_llama PRIVATE
+  base
+  gguf
   glog::glog
 )

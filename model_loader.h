@@ -1,7 +1,7 @@
 #pragma once
 
+#include <memory>
 #include <string>
-#include <optional>
 
 #include "model.h"
 
@@ -9,10 +9,10 @@ namespace tlm {
 
 class ModelLoader {
  public:
-  explicit ModelLoader(const std::string& model_path);
+  ModelLoader();
   ~ModelLoader();
 
-  std::optional<Model> Load();
+  std::unique_ptr<Model> Load(const std::string& model_path);
 };
 
 }  // namespace tlm

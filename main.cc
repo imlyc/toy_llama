@@ -16,8 +16,8 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << "Welcome to Toy Llama.";
 
-  tlm::ModelLoader loader(kModelPath);
-  std::optional<tlm::Model> model = loader.Load();
+  tlm::ModelLoader loader;
+  std::unique_ptr<tlm::Model> model = loader.Load(kModelPath);
   if (!model) {
     LOG(ERROR) << "Fail to load model at " << kModelPath;
   }
