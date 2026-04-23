@@ -1,12 +1,13 @@
 find_package(GTest REQUIRED)
 
-add_executable(tokenizer_test
+add_executable(toy_llama_test
   tokenizer_test.cc
+  gguf_parser_test.cc
 )
 
-target_include_directories(tokenizer_test PRIVATE ${CMAKE_SOURCE_DIR})
+target_include_directories(toy_llama_test PRIVATE ${CMAKE_SOURCE_DIR})
 
-target_link_libraries(tokenizer_test PRIVATE
+target_link_libraries(toy_llama_test PRIVATE
   base
   gguf
   libtlm
@@ -15,4 +16,4 @@ target_link_libraries(tokenizer_test PRIVATE
 )
 
 include(GoogleTest)
-gtest_discover_tests(tokenizer_test)
+gtest_discover_tests(toy_llama_test)
