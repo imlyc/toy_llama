@@ -13,6 +13,10 @@ class Model;
 class Tokenizer {
  public:
   explicit Tokenizer(const Model& model);
+  // Caller must keep the backing storage of `tokens` and `merges` alive for
+  // the lifetime of this Tokenizer.
+  Tokenizer(const std::vector<std::string_view>& tokens,
+            const std::vector<std::string_view>& merges);
   ~Tokenizer();
 
   std::vector<Token> TextToToken(const std::string& text);

@@ -106,9 +106,9 @@ std::array<std::string, 256> BuildByteToUtf8Map() {
   return m;
 }
 
-std::unordered_map<std::string_view, int> BuildMergeToRankMap(const Model& model) {
+std::unordered_map<std::string_view, int> BuildMergeToRankMap(
+    const std::vector<std::string_view>& merges) {
   std::unordered_map<std::string_view, int> merge_to_rank;
-  const std::vector<std::string_view>& merges = model.GetTokenizerMerges();
   int rank = 0;
   for (const auto& m : merges) {
     merge_to_rank.emplace(m, rank);
@@ -118,9 +118,8 @@ std::unordered_map<std::string_view, int> BuildMergeToRankMap(const Model& model
 }
 
 std::unordered_map<std::string_view, Token> BuildSymbolToTokenMap(
-    const Model& model) {
+    const std::vector<std::string_view>& tokens) {
   std::unordered_map<std::string_view, Token> symbol_to_token;
-  const std::vector<std::string_view>& tokens = model.GetTokenizerTokens();
   int id = 0;
   for (const auto& t : tokens) {
     symbol_to_token.emplace(t, Token{.id = id});
@@ -152,9 +151,14 @@ struct Merge {
 }  // namespace
 
 Tokenizer::Tokenizer(const Model& model)
+  : Tokenizer(model.GetTokenizerTokens(), model.GetTokenizerMerges()) {
+}
+
+Tokenizer::Tokenizer(const std::vector<std::string_view>& tokens,
+                     const std::vector<std::string_view>& merges)
   : byte_to_utf8_(BuildByteToUtf8Map()),
-    merge_to_rank_(BuildMergeToRankMap(model)),
-    symbol_to_token_(BuildSymbolToTokenMap(model)) {
+    merge_to_rank_(BuildMergeToRankMap(merges)),
+    symbol_to_token_(BuildSymbolToTokenMap(tokens)) {
 }
 
 Tokenizer::~Tokenizer() = default;

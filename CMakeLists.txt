@@ -35,3 +35,6 @@ target_link_libraries(toy_llama PRIVATE
   glog::glog
   re2::re2
 )
+
+enable_testing()
+add_subdirectory(test)
