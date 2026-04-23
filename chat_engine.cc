@@ -4,7 +4,7 @@
 
 namespace tlm {
 
-ChatEngine::ChatEngine(const Model& model) {}
+ChatEngine::ChatEngine(const Model& model) : tokenizer_(model) {}
 ChatEngine::~ChatEngine() = default;
 
 std::string ChatEngine::SendMessage(const std::string& message) {

@@ -16,6 +16,8 @@ include_directories(${CMAKE_SOURCE_DIR})
 add_subdirectory(base)
 add_subdirectory(gguf)
 
+add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
+
 add_executable(toy_llama
   main.cc
 
@@ -31,4 +33,5 @@ target_link_libraries(toy_llama PRIVATE
   base
   gguf
   glog::glog
+  re2::re2
 )

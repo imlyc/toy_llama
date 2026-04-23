@@ -16,9 +16,6 @@ class GgufParser {
   GgufParser();
   ~GgufParser();
 
-  bool Parse(std::byte* mem, size_t size);
-
- private:
   struct Array;
   using Value = std::variant<uint8_t,
                              int8_t,
@@ -50,6 +47,20 @@ class GgufParser {
     uint64_t offset = 0;
   };
 
+  bool Parse(std::byte* mem, size_t size);
+
+  template <typename T>
+  const T& GetMetadata(std::string_view key) {
+    return std::get<T>(metadata_[key]);
+  }
+
+  template <>
+  const std::vector<std::string_view>& GetMetadata(std::string_view key) {
+    const Array& array = GetMetadata<Array>(key);
+    return array.strings;
+  }
+
+ private:
   template <typename T>
   bool ReadType(T* result);
   template <typename T>

@@ -24,7 +24,14 @@ int main(int argc, char** argv) {
 
   tlm::ChatEngine chat_engine(*model);
 
-  std::string reply = chat_engine.SendMessage("Hello, how are you?");
+  std::string message;
+  if (argc == 2) {
+    message = std::string(argv[1]);
+  } else {
+    message = "Hello, how are you?";
+  }
+
+  std::string reply = chat_engine.SendMessage(message);
   LOG(INFO) << ">>>>\n" << reply << "\n<<<<";
 
   return 0;

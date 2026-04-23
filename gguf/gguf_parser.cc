@@ -61,6 +61,12 @@ bool GgufParser::ParseMetadataKV() {
   RET_CHECK(ReadString(&key));
   uint32_t value_type;
   RET_CHECK(ReadType<uint32_t>(&value_type));
+
+  if (static_cast<GgufMetadataValueType>(value_type) !=
+      GgufMetadataValueType::ARRAY) {
+    LOG(INFO) << "meatadata " << key << " type " << value_type;
+  }
+
   switch (static_cast<GgufMetadataValueType>(value_type)) {
     case GgufMetadataValueType::UINT8:
       RET_CHECK(ParseMetadataValue<uint8_t>(key));
@@ -141,6 +147,9 @@ bool GgufParser::ParseMetadataValueArray(std::string_view key) {
   RET_CHECK(ReadType<uint64_t>(&len));
 
   array.size = len;
+
+  LOG(INFO) << "metadata key " << key << " type array value type "
+            << value_type;
 
   switch (static_cast<GgufMetadataValueType>(value_type)) {
     case GgufMetadataValueType::UINT8:

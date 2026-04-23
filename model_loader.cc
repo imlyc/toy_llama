@@ -16,13 +16,13 @@ std::unique_ptr<Model> ModelLoader::Load(const std::string& model_path) {
     return nullptr;
   }
 
-  GgufParser parser;
-  if (!parser.Parse(model_file.get(), MmapFileGetSize(model_file))) {
+  auto parser = std::make_unique<GgufParser>();
+  if (!parser->Parse(model_file.get(), MmapFileGetSize(model_file))) {
     LOG(ERROR) << "Failed to parser gguf";
     return nullptr;
   }
 
-  auto model = std::make_unique<Model>(std::move(model_file));
+  auto model = std::make_unique<Model>(std::move(model_file), std::move(parser));
   return model;
 }
 
