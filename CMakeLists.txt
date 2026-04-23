@@ -18,9 +18,7 @@ add_subdirectory(gguf)
 
 add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
 
-add_executable(toy_llama
-  main.cc
-
+add_library(libtlm OBJECT
   chat_engine.cc
   model.cc
   model_loader.cc
@@ -29,11 +27,24 @@ add_executable(toy_llama
   transformer.cc
 )
 
+target_link_libraries(libtlm PRIVATE
+  base
+  gguf
+
+  glog::glog
+  re2::re2
+)
+
+add_executable(toy_llama
+  main.cc
+)
+
 target_link_libraries(toy_llama PRIVATE
   base
   gguf
+  libtlm
+
   glog::glog
-  re2::re2
 )
 
 enable_testing()
