@@ -1,4 +1,4 @@
-#include "tokenizer.h"
+#include "tokenizer/tokenizer.h"
 
 #include <limits>
 #include <queue>
@@ -9,7 +9,7 @@
 
 #include <re2/re2.h>
 
-#include "model.h"
+#include "model/model.h"
 
 namespace tlm {
 namespace {

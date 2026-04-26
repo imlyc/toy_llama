@@ -1,8 +1,8 @@
 #include <glog/logging.h>
 
 #include "chat_engine.h"
-#include "model_loader.h"
-#include "model.h"
+#include "model/model.h"
+#include "model/model_loader.h"
 
 namespace {
 constexpr char kModelPath[] =

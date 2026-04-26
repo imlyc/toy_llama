@@ -1,4 +1,4 @@
-#include "model_loader.h"
+#include "model/model_loader.h"
 
 #include <glog/logging.h>
 

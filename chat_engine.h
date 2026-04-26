@@ -2,11 +2,11 @@
 
 #include <string>
 
-#include "model.h"
-#include "sampler.h"
-#include "token.h"
-#include "tokenizer.h"
-#include "transformer.h"
+#include "model/model.h"
+#include "model/token.h"
+#include "sampler/sampler.h"
+#include "tokenizer/tokenizer.h"
+#include "transformer/transformer.h"
 
 namespace tlm {
 

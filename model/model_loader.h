@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-#include "model.h"
+#include "model/model.h"
 
 namespace tlm {
 

@@ -1,4 +1,4 @@
-#include "tokenizer.h"
+#include "tokenizer/tokenizer.h"
 
 #include <memory>
 #include <string>
@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include "token.h"
+#include "model/token.h"
 
 namespace tlm {
 namespace {

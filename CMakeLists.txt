@@ -13,26 +13,22 @@ find_package(glog REQUIRED)
 # Allow sub folder to use absolute path for include
 include_directories(${CMAKE_SOURCE_DIR})
 
+add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
+
 add_subdirectory(base)
 add_subdirectory(gguf)
-
-add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
+add_subdirectory(model)
+add_subdirectory(tokenizer)
+add_subdirectory(transformer)
+add_subdirectory(sampler)
 
 add_library(libtlm OBJECT
   chat_engine.cc
-  model.cc
-  model_loader.cc
-  sampler.cc
-  tokenizer.cc
-  transformer.cc
 )
 
-target_link_libraries(libtlm PRIVATE
-  base
-  gguf
-
-  glog::glog
-  re2::re2
+target_link_libraries(libtlm
+  PUBLIC model
+  PRIVATE tokenizer transformer sampler glog::glog
 )
 
 add_executable(toy_llama
@@ -42,8 +38,11 @@ add_executable(toy_llama
 target_link_libraries(toy_llama PRIVATE
   base
   gguf
+  model
+  tokenizer
+  transformer
+  sampler
   libtlm
-
   glog::glog
 )
 

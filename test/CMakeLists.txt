@@ -10,7 +10,8 @@ target_include_directories(toy_llama_test PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(toy_llama_test PRIVATE
   base
   gguf
-  libtlm
+  model
+  tokenizer
   glog::glog
   GTest::gtest_main
 )

@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "token.h"
+#include "model/token.h"
 
 namespace tlm {
 class Model;
