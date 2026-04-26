@@ -6,7 +6,7 @@
 
 namespace {
 constexpr char kModelPath[] =
-  "/Users/imlyc/Work/toy_llama/models/Llama-3.2-1B-Instruct-Q8_0.gguf";
+    "/Users/imlyc/Work/toy_llama/data/models/Llama-3.2-1B-Instruct-Q8_0.gguf";
 }  // namespace
 
 int main(int argc, char** argv) {
