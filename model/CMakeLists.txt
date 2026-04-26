@@ -3,7 +3,8 @@ add_library(model OBJECT
   model_loader.cc
 )
 
-target_link_libraries(model
-  PUBLIC base
-  PRIVATE gguf glog::glog
+target_link_libraries(model PRIVATE
+  base
+  gguf
+  glog::glog
 )

@@ -26,9 +26,12 @@ add_library(libtlm OBJECT
   chat_engine.cc
 )
 
-target_link_libraries(libtlm
-  PUBLIC model
-  PRIVATE tokenizer transformer sampler glog::glog
+target_link_libraries(libtlm PRIVATE
+  model
+  tokenizer
+  transformer
+  sampler
+  glog::glog
 )
 
 add_executable(toy_llama
