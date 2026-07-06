@@ -269,4 +269,13 @@ bool GgufParser::ReadString(std::string_view* result) {
   return true;
 }
 
+const GgufParser::TensorInfo& GgufParser::GetTensorInfo(
+    std::string_view key) const {
+  return tensor_infos_.at(key);
+}
+
+const std::byte* GgufParser::GetTensorData(const TensorInfo& info) const {
+  return tensor_data_ + info.offset;
+}
+
 }  // namespace tlm

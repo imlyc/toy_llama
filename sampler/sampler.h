@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vector>
+#include <span>
 
 #include "model/token.h"
 
@@ -11,7 +11,7 @@ class Sampler {
   Sampler();
   ~Sampler();
 
-  Token Pick(const std::vector<float>& logits);
+  Token Pick(std::span<const float> logits);
 };
 
 }  // namespace tlm

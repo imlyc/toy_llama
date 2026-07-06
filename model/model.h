@@ -5,6 +5,8 @@
 #include <vector>
 
 #include "base/mmap_file.h"
+#include "model/token.h"
+#include "tensor/tensor_view.h"
 
 namespace tlm {
 class GgufParser;
@@ -16,8 +18,16 @@ class Model {
 
   const std::vector<std::string_view>& GetTokenizerMerges() const;
   const std::vector<std::string_view>& GetTokenizerTokens() const;
+  VectorView GetTokenEmbedding(Token token) const;
+
+  Token GetBosToken() const;
+  Token GetEosToken() const;
+
+  int GetDecoderBlockCount() const;
 
  private:
+  VectorView GgufMatrixRow2VectorView(std::string_view key, int row) const;
+
   ScopedMmapFile model_file_;
   std::unique_ptr<GgufParser> parser_;
 };

@@ -22,6 +22,8 @@ int main(int argc, char** argv) {
     LOG(ERROR) << "Fail to load model at " << kModelPath;
   }
 
+  LOG(INFO) << "Load model at " << kModelPath;
+
   tlm::ChatEngine chat_engine(*model);
 
   std::string message;

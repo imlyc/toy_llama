@@ -18,6 +18,7 @@ class ChatEngine {
   std::string SendMessage(const std::string& message);
 
  private:
+  const Model& model_;
   Tokenizer tokenizer_;
   Transformer transformer_;
   Sampler sampler_;

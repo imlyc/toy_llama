@@ -5,8 +5,8 @@ namespace tlm {
 Sampler::Sampler() {}
 Sampler::~Sampler() = default;
 
-Token Sampler::Pick(const std::vector<float>& logits) {
-  return Token::EOS;
+Token Sampler::Pick(std::span<const float> logits) {
+  return Token::INVALID;
 }
 
 }  // namespace tlm

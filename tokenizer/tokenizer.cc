@@ -130,8 +130,8 @@ std::unordered_map<std::string_view, Token> BuildSymbolToTokenMap(
 
 struct Symbol {
   std::string_view text;
-  int next = -1;
   int prev = -1;
+  int next = -1;
   bool deleted = false;
 };
 

@@ -11,6 +11,7 @@ target_link_libraries(toy_llama_test PRIVATE
   base
   gguf
   model
+  tensor
   tokenizer
   glog::glog
   GTest::gtest_main

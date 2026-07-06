@@ -7,6 +7,8 @@
 #include <variant>
 #include <vector>
 
+#include <glog/logging.h>
+
 #include "gguf/gguf_type.h"
 
 namespace tlm {
@@ -50,15 +52,18 @@ class GgufParser {
   bool Parse(std::byte* mem, size_t size);
 
   template <typename T>
-  const T& GetMetadata(std::string_view key) {
-    return std::get<T>(metadata_[key]);
+  const T& GetMetadata(std::string_view key) const {
+    return std::get<T>(metadata_.at(key));
   }
 
   template <>
-  const std::vector<std::string_view>& GetMetadata(std::string_view key) {
+  const std::vector<std::string_view>& GetMetadata(std::string_view key) const {
     const Array& array = GetMetadata<Array>(key);
     return array.strings;
   }
+
+  const TensorInfo& GetTensorInfo(std::string_view key) const;
+  const std::byte* GetTensorData(const TensorInfo& info) const;
 
  private:
   template <typename T>

@@ -5,6 +5,8 @@
 #include "base/mmap_file.h"
 #include "gguf/gguf_parser.h"
 
+#include <cstdio>
+
 namespace tlm {
 ModelLoader::ModelLoader() = default;
 ModelLoader::~ModelLoader() = default;
