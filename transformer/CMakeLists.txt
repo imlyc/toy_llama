@@ -1,7 +1,11 @@
 add_library(transformer OBJECT
   decoder_block.cc
+  group_query_attn_block.cc
   linear_layer.cc
   rms_norm_layer.cc
+  rope_layer.cc
+  softmax_layer.cc
+  swiglu_ffn_block.cc
   transformer.cc
 )
 

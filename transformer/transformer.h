@@ -3,11 +3,13 @@
 #include <span>
 #include <vector>
 
+#include "compute/compute_engine.h"
 #include "model/token.h"
 #include "tensor/tensor_view.h"
 #include "transformer/decoder_block.h"
 #include "transformer/linear_layer.h"
 #include "transformer/rms_norm_layer.h"
+#include "transformer/softmax_layer.h"
 
 namespace tlm {
 class Model;
@@ -24,9 +26,12 @@ class Transformer {
   VectorView LookupTokenEmbedding(Token token);
 
   const Model& model_;
+  ComputeEngine compute_engine_;
+
   std::vector<DecoderBlock> decoder_blocks_;
   RmsNormLayer final_rms_norm_;
   LinearLayer linear_output_;
+  SoftmaxLayer softmax_;
 };
 
 }  // namespace tlm

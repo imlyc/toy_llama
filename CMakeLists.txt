@@ -14,6 +14,7 @@ find_package(glog REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR})
 
 add_subdirectory(base)
+add_subdirectory(compute)
 add_subdirectory(gguf)
 add_subdirectory(model)
 add_subdirectory(tensor)
@@ -29,6 +30,8 @@ add_library(libtlm OBJECT
 )
 
 target_link_libraries(libtlm PRIVATE
+  base
+  compute
   model
   tensor
   tokenizer
@@ -43,6 +46,7 @@ add_executable(toy_llama
 
 target_link_libraries(toy_llama PRIVATE
   base
+  compute
   gguf
   model
   tensor

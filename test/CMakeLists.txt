@@ -9,6 +9,7 @@ target_include_directories(toy_llama_test PRIVATE ${CMAKE_SOURCE_DIR})
 
 target_link_libraries(toy_llama_test PRIVATE
   base
+  compute
   gguf
   model
   tensor

@@ -9,7 +9,7 @@ namespace tlm {
 Transformer::Transformer(const Model& model) : model_(model) {
   int decoder_block_count = model_.GetDecoderBlockCount();
   for (int i = 0; i < decoder_block_count; i++) {
-    decoder_blocks_.emplace_back();
+    decoder_blocks_.emplace_back(compute_engine_);
   }
 }
 
@@ -32,9 +32,10 @@ std::span<const float> Transformer::Predict(Token token) {
 
   VectorView final_rms_output = final_rms_norm_.Forward(block_input);
   VectorView linear_output = linear_output_.Forward(final_rms_output);
+  VectorView softmax_output = softmax_.Forward(linear_output);
 
-  CHECK_EQ(linear_output.dtype, DType::F32);
-  return linear_output.As<const float>();
+  CHECK_EQ(softmax_output.dtype, DType::F32);
+  return softmax_output.As<const float>();
 }
 
 VectorView Transformer::LookupTokenEmbedding(Token token) {
