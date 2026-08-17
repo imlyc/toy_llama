@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -43,6 +44,15 @@ struct TensorView {
   template <typename T>
   std::span<T> As() const {
     return std::span(reinterpret_cast<T*>(data), TotalBytes() / sizeof(T));
+  }
+
+  TensorView<Rank - 1, Mutable> At(int index) const requires (Rank >= 2) {
+    TensorView<Rank - 1, Mutable> ret;
+    ret.dtype = dtype;
+    ret.data = data + stride[0] * index;
+    std::copy_n(shape + 1, Rank - 1, ret.shape);
+    std::copy_n(stride + 1, Rank - 1, ret.stride);
+    return ret;
   }
 };
 
