@@ -13,6 +13,8 @@ class DecoderBlock {
   explicit DecoderBlock(ComputeEngine& compute_engine);
   ~DecoderBlock();
 
+  DecoderBlock(DecoderBlock&&);
+
   VectorView Forward(VectorView input);
 
  private:

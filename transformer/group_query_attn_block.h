@@ -1,7 +1,9 @@
 #pragma once
 
+#include <memory>
+
+#include "compute/storage.h"
 #include "tensor/tensor_view.h"
-#include "transformer/rope_layer.h"
 
 namespace tlm {
 class ComputeEngine;
@@ -11,17 +13,35 @@ class GroupQueryAttnBlock {
   explicit GroupQueryAttnBlock(ComputeEngine& compute);
   ~GroupQueryAttnBlock();
 
+  GroupQueryAttnBlock(GroupQueryAttnBlock&&);
+
   VectorView Forward(VectorView input);
 
  private:
   ComputeEngine& compute_;
 
+  // TODO: Use parameters from model.
+  const int64_t key_size_ = 64;
+  const int64_t value_size_ = 64;
+  const int64_t context_length_ = 131072;
+
+  int64_t token_index_ = 0;
+
   MatrixView wq_;
   MatrixView wk_;
   MatrixView wv_;
 
-  RopeLayer q_rope_layer_;
-  RopeLayer k_rope_layer_;
+  std::unique_ptr<Storage> query_storage_;
+  MutableVectorView query_;
+
+  std::unique_ptr<Storage> k_cache_storage_;
+  MutableMatrixView k_cache_;
+
+  std::unique_ptr<Storage> v_cache_storage_;
+  MutableMatrixView v_cache_;
+
+  std::unique_ptr<Storage> attn_storage_;
+  MutableVectorView attn_;
 };
 
 }  // namespace tlm

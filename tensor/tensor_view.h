@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -26,11 +27,11 @@ struct TensorView {
   Byte* data = nullptr;
 
   // Number of elements in each dimension, ordered in C style.
-  int64_t shape[Rank] = {0};
+  std::array<int64_t, Rank> shape {};
 
   // Size in bytes of stride in each dimension, ordered in C style.
   // stride[Rank-1] is the bytes per block.
-  int64_t stride[Rank] = {0};
+  std::array<int64_t, Rank> stride {};
 
   int64_t TotalBytes() const {
     if constexpr (Rank == 1) {
@@ -46,13 +47,18 @@ struct TensorView {
     return std::span(reinterpret_cast<T*>(data), TotalBytes() / sizeof(T));
   }
 
-  TensorView<Rank - 1, Mutable> At(int index) const requires (Rank >= 2) {
+  TensorView<Rank - 1, Mutable> At(int64_t index) const requires (Rank >= 2) {
     TensorView<Rank - 1, Mutable> ret;
     ret.dtype = dtype;
     ret.data = data + stride[0] * index;
-    std::copy_n(shape + 1, Rank - 1, ret.shape);
-    std::copy_n(stride + 1, Rank - 1, ret.stride);
+    std::copy_n(shape.begin() + 1, Rank - 1, ret.shape.begin());
+    std::copy_n(stride.begin() + 1, Rank - 1, ret.stride.begin());
     return ret;
+  }
+
+  // Return an immutable view of the current tensor.
+  TensorView<Rank, false> View() const {
+    return {dtype, data, shape, stride};
   }
 };
 
