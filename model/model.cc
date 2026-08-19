@@ -69,14 +69,7 @@ VectorView Model::GgufMatrixRow2VectorView(std::string_view key,
   CHECK_LT(row, info.dimensions[1]);
 
   DType dtype = GgmlType2DType(info.type);
-
-  VectorView vv{
-      .dtype = dtype,
-      .data = data + info.dimensions[0] * row,
-      .shape = {CheckedCast<int>(info.dimensions[0])},
-      .stride = {GetDTypeBlockBytes(dtype)},
-  };
-
-  return vv;
+  return VectorView::Create(dtype, data + info.dimensions[0] * row,
+                            CheckedCast<int>(info.dimensions[0]));
 }
 }  // namespace tlm

@@ -60,6 +60,29 @@ struct TensorView {
   TensorView<Rank, false> View() const {
     return {dtype, data, shape, stride};
   }
+
+  template <typename... Sizes>
+    requires(sizeof...(Sizes) == Rank) &&
+            (std::is_convertible_v<Sizes, int64_t> && ...)
+  static TensorView<sizeof...(Sizes), Mutable> Create(DType dtype,
+                                                      Byte* data,
+                                                      Sizes... sizes) {
+    TensorView<Rank, Mutable> view;
+    view.dtype = dtype;
+    view.data = data;
+    view.shape = std::array<int64_t, Rank>{static_cast<int64_t>(sizes)...};
+    view.stride[Rank - 1] = GetDTypeBlockBytes(view.dtype);
+    for (int i = Rank - 2; i >= 0; i--) {
+      if (i == Rank - 2) {
+        view.stride[i] = view.shape[i + 1] / GetDTypeBlockElements(view.dtype) *
+                         view.stride[i + 1];
+      } else {
+        view.stride[i] = view.shape[i + 1] * view.stride[i + 1];
+      }
+    }
+
+    return view;
+  }
 };
 
 using VectorView = TensorView<1>;
