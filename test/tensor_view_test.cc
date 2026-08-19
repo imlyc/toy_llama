@@ -221,5 +221,118 @@ TEST_F(Tensor3Q8Fixture, AtMutableWritesThrough) {
   EXPECT_EQ(data_[204 + 34], static_cast<std::byte>(7));
 }
 
+// ── TensorView::Create ────────────────────────────────────────────────────────
+//
+// Create is a static factory: the enclosing view type fixes Rank + mutability,
+// the size arguments give the shape, and it fills contiguous (row-major),
+// block-aware strides for the given dtype.
+
+TEST(TensorViewCreate, VectorF32) {
+  std::vector<float> buf(8);
+  auto* data = reinterpret_cast<std::byte*>(buf.data());
+
+  auto v = MutableVectorView::Create(DType::F32, data, 8);
+
+  EXPECT_EQ(v.dtype, DType::F32);
+  EXPECT_EQ(v.data, data);
+  EXPECT_EQ(v.shape[0], 8);
+  EXPECT_EQ(v.stride[0], 4);        // bytes per F32 block
+  EXPECT_EQ(v.TotalBytes(), 32);    // 8 * 4
+}
+
+TEST(TensorViewCreate, MatrixF32) {
+  std::vector<float> buf(3 * 4);
+  auto* data = reinterpret_cast<std::byte*>(buf.data());
+
+  auto m = MutableMatrixView::Create(DType::F32, data, 3, 4);
+
+  EXPECT_EQ(m.dtype, DType::F32);
+  EXPECT_EQ(m.shape[0], 3);
+  EXPECT_EQ(m.shape[1], 4);
+  EXPECT_EQ(m.stride[0], 16);       // 4 cols * 4 bytes/block
+  EXPECT_EQ(m.stride[1], 4);
+  EXPECT_EQ(m.TotalBytes(), 48);
+}
+
+TEST(TensorViewCreate, Tensor3F32Strides) {
+  std::vector<float> buf(2 * 3 * 4);
+  auto* data = reinterpret_cast<std::byte*>(buf.data());
+
+  auto t = MutableTensor3View::Create(DType::F32, data, 2, 3, 4);
+
+  EXPECT_EQ(t.shape[0], 2);
+  EXPECT_EQ(t.shape[1], 3);
+  EXPECT_EQ(t.shape[2], 4);
+  EXPECT_EQ(t.stride[0], 48);
+  EXPECT_EQ(t.stride[1], 16);
+  EXPECT_EQ(t.stride[2], 4);
+}
+
+TEST(TensorViewCreate, MatrixQ8BlockAwareStrides) {
+  std::vector<std::byte> buf(2 * (64 / 32) * 34);  // 2 rows, 2 blocks each
+
+  auto m = MutableMatrixView::Create(DType::Q8_0, buf.data(), 2, 64);
+
+  EXPECT_EQ(m.dtype, DType::Q8_0);
+  EXPECT_EQ(m.shape[0], 2);
+  EXPECT_EQ(m.shape[1], 64);
+  EXPECT_EQ(m.stride[0], 68);       // (64 / 32 blocks) * 34 bytes
+  EXPECT_EQ(m.stride[1], 34);       // bytes per Q8_0 block
+}
+
+TEST(TensorViewCreate, Tensor3Q8BlockAwareStrides) {
+  std::vector<std::byte> buf(2 * 2 * (64 / 32) * 34);
+
+  auto t = MutableTensor3View::Create(DType::Q8_0, buf.data(), 2, 2, 64);
+
+  EXPECT_EQ(t.stride[0], 136);      // shape[1] * stride[1]
+  EXPECT_EQ(t.stride[1], 68);       // (64 / 32) * 34
+  EXPECT_EQ(t.stride[2], 34);       // bytes per block
+}
+
+// Create works on the const specialization too (Byte* is const std::byte*).
+TEST(TensorViewCreate, ConstView) {
+  std::vector<float> buf(4);
+  const std::byte* data = reinterpret_cast<const std::byte*>(buf.data());
+
+  auto v = VectorView::Create(DType::F32, data, 4);
+
+  static_assert(std::is_same_v<decltype(v), VectorView>);
+  EXPECT_EQ(v.data, data);
+  EXPECT_EQ(v.shape[0], 4);
+  EXPECT_EQ(v.stride[0], 4);
+}
+
+// The enclosing type's mutability flows into the created view.
+TEST(TensorViewCreate, MutabilityPropagates) {
+  std::vector<float> buf(4);
+  auto* mdata = reinterpret_cast<std::byte*>(buf.data());
+  const std::byte* cdata = reinterpret_cast<const std::byte*>(buf.data());
+
+  static_assert(std::is_same_v<
+      decltype(MutableMatrixView::Create(DType::F32, mdata, 2, 2)),
+      MutableMatrixView>);
+  static_assert(std::is_same_v<
+      decltype(MatrixView::Create(DType::F32, cdata, 2, 2)), MatrixView>);
+}
+
+// Integration: strides from Create navigate correctly through At + As.
+TEST(TensorViewCreate, NavigatesWithAtAndAs) {
+  std::vector<float> buf(2 * 3 * 4);
+  for (int i = 0; i < static_cast<int>(buf.size()); ++i) {
+    buf[i] = static_cast<float>(i);
+  }
+  auto* data = reinterpret_cast<std::byte*>(buf.data());
+
+  auto t = MutableTensor3View::Create(DType::F32, data, 2, 3, 4);
+  auto row = t.At(1).At(2).As<float>();  // element (1, 2, :) = flat 20..23
+
+  ASSERT_EQ(row.size(), 4u);
+  EXPECT_FLOAT_EQ(row[0], 20.f);
+  EXPECT_FLOAT_EQ(row[1], 21.f);
+  EXPECT_FLOAT_EQ(row[2], 22.f);
+  EXPECT_FLOAT_EQ(row[3], 23.f);
+}
+
 }  // namespace
 }  // namespace tlm
