@@ -20,4 +20,4 @@ target_link_libraries(toy_llama_test PRIVATE
 )
 
 include(GoogleTest)
-gtest_discover_tests(toy_llama_test)
+gtest_discover_tests(toy_llama_test DISCOVERY_MODE PRE_TEST)
