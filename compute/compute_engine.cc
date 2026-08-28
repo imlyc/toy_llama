@@ -111,6 +111,13 @@ void ComputeEngine::Attn(MutableVectorView out,
   }
 }
 
+void ComputeEngine::Softmax(MutableVectorView view) {
+  CHECK_EQ(view.dtype, DType::F32);
+  std::span<float> view_data = view.As<float>();
+  Map<VectorXf> view_vec(view_data.data(), view_data.size());
+  SoftmaxHelper(view_vec);
+}
+
 void ComputeEngine::Rope(MutableVectorView view, int64_t position) {}
 
 }  // namespace tlm

@@ -62,6 +62,10 @@ int Model::GetDecoderBlockCount() const {
   return CheckedCast<int>(parser_->GetMetadata<uint32_t>("llama.block_count"));
 }
 
+int Model::GetVocabSize() const {
+  return CheckedCast<int>(parser_->GetMetadata<uint32_t>("llama.vocab_size"));
+}
+
 VectorView Model::GgufMatrixRow2VectorView(std::string_view key,
                                            int row) const {
   const GgufParser::TensorInfo& info = parser_->GetTensorInfo(key);

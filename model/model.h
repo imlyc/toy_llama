@@ -24,6 +24,7 @@ class Model {
   Token GetEosToken() const;
 
   int GetDecoderBlockCount() const;
+  int GetVocabSize() const;
 
  private:
   VectorView GgufMatrixRow2VectorView(std::string_view key, int row) const;

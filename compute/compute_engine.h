@@ -25,6 +25,9 @@ class ComputeEngine {
   void Attn(MutableVectorView out, VectorView q, MatrixView k, MatrixView v,
             int64_t head_count_q, int64_t head_count_kv);
 
+  // In place softmax.
+  void Softmax(MutableVectorView view);
+
   // In place RoPE.
   void Rope(MutableVectorView view, int64_t position);
 };

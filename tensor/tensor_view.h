@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -77,6 +78,15 @@ struct TensorView {
     requires (Mutable || !RetMutable)
   TensorView<Rank, RetMutable> Top(int64_t len) const {
     return Slice<RetMutable>(0, len);
+  }
+
+  template <bool OtherMutable>
+  void CopyFrom(TensorView<Rank, OtherMutable> other) requires Mutable {
+    assert(dtype == other.dtype);
+    assert(shape == other.shape);
+    assert(stride == other.stride);
+
+    std::copy_n(other.data, TotalBytes(), data);
   }
 
   template <typename... Sizes>

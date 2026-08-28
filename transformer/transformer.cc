@@ -2,6 +2,7 @@
 
 #include <glog/logging.h>
 
+#include "compute/storage.h"
 #include "model/model.h"
 
 namespace tlm {
@@ -11,6 +12,10 @@ Transformer::Transformer(const Model& model) : model_(model) {
   for (int i = 0; i < decoder_block_count; i++) {
     decoder_blocks_.emplace_back(compute_engine_);
   }
+
+  const int64_t vocab_size = model_.GetVocabSize();
+  logits_storage_ = compute_engine_.Alloc(vocab_size);
+  logits_ = logits_storage_->AsVector(vocab_size);
 }
 
 Transformer::~Transformer() = default;
@@ -32,10 +37,11 @@ std::span<const float> Transformer::Predict(Token token) {
 
   VectorView final_rms_output = final_rms_norm_.Forward(block_input);
   VectorView linear_output = linear_output_.Forward(final_rms_output);
-  VectorView softmax_output = softmax_.Forward(linear_output);
 
-  CHECK_EQ(softmax_output.dtype, DType::F32);
-  return softmax_output.As<const float>();
+  logits_.CopyFrom(linear_output);
+  compute_engine_.Softmax(logits_);
+
+  return logits_.As<const float>();
 }
 
 VectorView Transformer::LookupTokenEmbedding(Token token) {

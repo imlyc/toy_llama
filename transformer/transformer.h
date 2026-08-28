@@ -9,10 +9,10 @@
 #include "transformer/decoder_block.h"
 #include "transformer/linear_layer.h"
 #include "transformer/rms_norm_layer.h"
-#include "transformer/softmax_layer.h"
 
 namespace tlm {
 class Model;
+class Storage;
 
 class Transformer {
  public:
@@ -31,7 +31,9 @@ class Transformer {
   std::vector<DecoderBlock> decoder_blocks_;
   RmsNormLayer final_rms_norm_;
   LinearLayer linear_output_;
-  SoftmaxLayer softmax_;
+
+  std::unique_ptr<Storage> logits_storage_;
+  MutableVectorView logits_;
 };
 
 }  // namespace tlm
