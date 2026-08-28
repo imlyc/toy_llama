@@ -147,5 +147,51 @@ TEST(ComputeEngineAttnTest, TopSliceIgnoresRowsBeyondLength) {
   EXPECT_NEAR(out[1], 6.f, 1e-4);
 }
 
+// Add must OVERWRITE out with lhs + rhs. out is pre-filled with a sentinel to
+// catch implementations that accumulate into existing contents.
+TEST(ComputeEngineAddTest, OverwritesOut) {
+  ComputeEngine engine;
+  std::vector<float> lhs = {1.f, -2.f, 0.5f, 0.f};
+  std::vector<float> rhs = {10.f, 20.f, -0.5f, 0.f};
+  std::vector<float> out = {99.f, 99.f, 99.f, 99.f};  // stale garbage
+
+  engine.Add(AsMutableVec(out), AsVec(lhs), AsVec(rhs));
+
+  EXPECT_FLOAT_EQ(out[0], 11.f);
+  EXPECT_FLOAT_EQ(out[1], 18.f);
+  EXPECT_FLOAT_EQ(out[2], 0.f);
+  EXPECT_FLOAT_EQ(out[3], 0.f);
+}
+
+// Calling Add twice into the same out must give the same result both times
+// (no accumulation across calls) — mirrors how block buffers are reused
+// across tokens.
+TEST(ComputeEngineAddTest, RepeatedCallsAreIdempotent) {
+  ComputeEngine engine;
+  std::vector<float> lhs = {1.f, 2.f};
+  std::vector<float> rhs = {3.f, 4.f};
+  std::vector<float> out(2, 0.f);
+
+  engine.Add(AsMutableVec(out), AsVec(lhs), AsVec(rhs));
+  engine.Add(AsMutableVec(out), AsVec(lhs), AsVec(rhs));
+
+  EXPECT_FLOAT_EQ(out[0], 4.f);
+  EXPECT_FLOAT_EQ(out[1], 6.f);
+}
+
+// In-place add: out aliases lhs (elementwise op, so aliasing is safe by
+// contract). out = out + rhs.
+TEST(ComputeEngineAddTest, InPlaceLhsAlias) {
+  ComputeEngine engine;
+  std::vector<float> lhs = {1.f, 2.f, 3.f};
+  std::vector<float> rhs = {10.f, 20.f, 30.f};
+
+  engine.Add(AsMutableVec(lhs), AsVec(lhs), AsVec(rhs));
+
+  EXPECT_FLOAT_EQ(lhs[0], 11.f);
+  EXPECT_FLOAT_EQ(lhs[1], 22.f);
+  EXPECT_FLOAT_EQ(lhs[2], 33.f);
+}
+
 }  // namespace
 }  // namespace tlm
