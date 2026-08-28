@@ -25,6 +25,19 @@ inline void SoftmaxHelper(Ref<VectorXf> vec) {
   vec.array() = vec.array().exp();
   vec /= vec.sum();
 }
+
+template <bool Mutable, typename T>
+using MaybeConst = std::conditional_t<Mutable, T, const T>;
+
+template <bool Mutable>
+inline Map<MaybeConst<Mutable, VectorXf>> CreateVectorXf(
+    TensorView<1, Mutable> view) {
+  CHECK_EQ(view.dtype, DType::F32);
+  using Float = MaybeConst<Mutable, float>;
+  std::span<Float> data = view.template As<Float>();
+  Map<MaybeConst<Mutable, VectorXf>> vec(data.data(), data.size());
+  return vec;
+}
 }  // namespace
 
 ComputeEngine::ComputeEngine() = default;
@@ -35,6 +48,13 @@ std::unique_ptr<Storage> ComputeEngine::Alloc(int64_t size) {
 }
 
 void ComputeEngine::Add(MutableVectorView out, VectorView lhs, VectorView rhs) {
+  CHECK_EQ(out.dtype, DType::F32);
+  CHECK_EQ(lhs.dtype, DType::F32);
+  CHECK_EQ(rhs.dtype, DType::F32);
+  CHECK_EQ(out.shape[0], lhs.shape[0]);
+  CHECK_EQ(out.shape[0], rhs.shape[0]);
+  Map<VectorXf> out_vec = CreateVectorXf(out);
+  out_vec = CreateVectorXf(lhs) + CreateVectorXf(rhs);
 }
 
 void ComputeEngine::MatMul(MutableVectorView out,
@@ -112,9 +132,7 @@ void ComputeEngine::Attn(MutableVectorView out,
 }
 
 void ComputeEngine::Softmax(MutableVectorView view) {
-  CHECK_EQ(view.dtype, DType::F32);
-  std::span<float> view_data = view.As<float>();
-  Map<VectorXf> view_vec(view_data.data(), view_data.size());
+  Map<VectorXf> view_vec = CreateVectorXf(view);
   SoftmaxHelper(view_vec);
 }
 
