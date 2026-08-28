@@ -18,6 +18,8 @@ GroupQueryAttnBlock::GroupQueryAttnBlock(ComputeEngine& compute)
       v_cache_storage_->AsMatrix(context_length_, value_size_ * head_count_kv_);
   attn_storage_ = compute_.Alloc(value_size_ * head_count_);
   attn_ = attn_storage_->AsVector(value_size_ * head_count_);
+  output_storage_ = compute_.Alloc(output_size_);
+  output_ = output_storage_->AsVector(output_size_);
 }
 GroupQueryAttnBlock::~GroupQueryAttnBlock() = default;
 
@@ -38,8 +40,10 @@ VectorView GroupQueryAttnBlock::Forward(VectorView input) {
   compute_.Attn(attn_, query_.View(), k_cache_.Top(length),
                 v_cache_.Top(length), head_count_, head_count_kv_);
 
+  compute_.MatMul(output_, attn_.View(), wo_);
+
   token_index_++;
-  return attn_.View();
+  return output_.View();
 }
 
 }  // namespace tlm

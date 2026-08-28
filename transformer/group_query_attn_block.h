@@ -26,12 +26,14 @@ class GroupQueryAttnBlock {
   const int64_t context_length_ = 131072;
   const int64_t head_count_ = 32;
   const int64_t head_count_kv_ = 8;
+  const int64_t output_size_ = 2048;
 
   int64_t token_index_ = 0;
 
   MatrixView wq_;
   MatrixView wk_;
   MatrixView wv_;
+  MatrixView wo_;
 
   std::unique_ptr<Storage> query_storage_;
   MutableVectorView query_;
@@ -44,6 +46,9 @@ class GroupQueryAttnBlock {
 
   std::unique_ptr<Storage> attn_storage_;
   MutableVectorView attn_;
+
+  std::unique_ptr<Storage> output_storage_;
+  MutableVectorView output_;
 };
 
 }  // namespace tlm
