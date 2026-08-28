@@ -30,7 +30,9 @@ VectorView GroupQueryAttnBlock::Forward(VectorView input) {
   MutableVectorView value = v_cache_.At(token_index_);
   compute_.MatMul(value, input, wv_);
 
-  compute_.Attn(attn_, query_.View(), k_cache_.View(), v_cache_.View());
+  int64_t length = token_index_ + 1;
+  compute_.Attn(attn_, query_.View(), k_cache_.Top(length),
+                v_cache_.Top(length), head_count_, head_count_kv_);
 
   token_index_++;
   return attn_.View();

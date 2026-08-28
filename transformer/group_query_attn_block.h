@@ -24,6 +24,8 @@ class GroupQueryAttnBlock {
   const int64_t key_size_ = 64;
   const int64_t value_size_ = 64;
   const int64_t context_length_ = 131072;
+  const int64_t head_count_ = 32;
+  const int64_t head_count_kv_ = 8;
 
   int64_t token_index_ = 0;
 

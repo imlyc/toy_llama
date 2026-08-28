@@ -61,6 +61,24 @@ struct TensorView {
     return {dtype, data, shape, stride};
   }
 
+  // Return an immutable sliced view of the current tensor along the first
+  // dimension.
+  template <bool RetMutable = false>
+    requires (Mutable || !RetMutable)
+  TensorView<Rank, RetMutable> Slice(int64_t index, int64_t len) const {
+    TensorView<Rank, RetMutable> ret = {dtype, data, shape, stride};
+    ret.data += stride[0] * index;
+    ret.shape[0] = len;
+
+    return ret;
+  }
+
+  template <bool RetMutable = false>
+    requires (Mutable || !RetMutable)
+  TensorView<Rank, RetMutable> Top(int64_t len) const {
+    return Slice<RetMutable>(0, len);
+  }
+
   template <typename... Sizes>
     requires(sizeof...(Sizes) == Rank) &&
             (std::is_convertible_v<Sizes, int64_t> && ...)

@@ -21,7 +21,9 @@ class ComputeEngine {
   void MatMul(MutableVectorView out, VectorView lhs, MatrixView rhs);
 
   // Scaled dot product attention. a = softmax(q @ transpose(K) / sqrt(dk)) @ V.
-  void Attn(MutableVectorView out, VectorView q, MatrixView k, MatrixView v);
+  // Support different head count for GQA, MHA.
+  void Attn(MutableVectorView out, VectorView q, MatrixView k, MatrixView v,
+            int64_t head_count_q, int64_t head_count_kv);
 
   // In place RoPE.
   void Rope(MutableVectorView view, int64_t position);

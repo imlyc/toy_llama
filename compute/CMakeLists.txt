@@ -4,6 +4,7 @@ add_library(compute OBJECT
 )
 
 target_link_libraries(compute PRIVATE
+  eigen
   tensor
   glog::glog
 )
