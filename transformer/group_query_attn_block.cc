@@ -5,15 +5,19 @@
 namespace tlm {
 
 GroupQueryAttnBlock::GroupQueryAttnBlock(ComputeEngine& compute)
-  : compute_(compute) {
-  query_storage_ = compute_.Alloc(key_size_);
-  query_ = query_storage_->AsVector(key_size_);
-  k_cache_storage_ = compute_.Alloc(context_length_ * key_size_);
-  k_cache_ = k_cache_storage_->AsMatrix(context_length_, key_size_);
-  v_cache_storage_ = compute_.Alloc(context_length_ * value_size_);
-  v_cache_ = v_cache_storage_->AsMatrix(context_length_, value_size_);
-  attn_storage_ = compute_.Alloc(value_size_);
-  attn_ = attn_storage_->AsVector(value_size_);
+    : compute_(compute) {
+  query_storage_ = compute_.Alloc(key_size_ * head_count_);
+  query_ = query_storage_->AsVector(key_size_ * head_count_);
+  k_cache_storage_ =
+      compute_.Alloc(context_length_ * key_size_ * head_count_kv_);
+  k_cache_ =
+      k_cache_storage_->AsMatrix(context_length_, key_size_ * head_count_kv_);
+  v_cache_storage_ =
+      compute_.Alloc(context_length_ * value_size_ * head_count_kv_);
+  v_cache_ =
+      v_cache_storage_->AsMatrix(context_length_, value_size_ * head_count_kv_);
+  attn_storage_ = compute_.Alloc(value_size_ * head_count_);
+  attn_ = attn_storage_->AsVector(value_size_ * head_count_);
 }
 GroupQueryAttnBlock::~GroupQueryAttnBlock() = default;
 
