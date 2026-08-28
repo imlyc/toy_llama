@@ -27,6 +27,8 @@ class GroupQueryAttnBlock {
   const int64_t head_count_ = 32;
   const int64_t head_count_kv_ = 8;
   const int64_t output_size_ = 2048;
+  const float rope_freq_base_ = 500000;
+  const int rope_dimension_count_ = 64;
 
   int64_t token_index_ = 0;
 

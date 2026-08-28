@@ -29,7 +29,10 @@ class ComputeEngine {
   void Softmax(MutableVectorView view);
 
   // In place RoPE.
-  void Rope(MutableVectorView view, int64_t position);
+  void Rope(MutableVectorView view,
+            int64_t position,
+            float freq_base,
+            int dimension_count);
 };
 
 }  // namespace tlm
