@@ -193,5 +193,99 @@ TEST(ComputeEngineAddTest, InPlaceLhsAlias) {
   EXPECT_FLOAT_EQ(lhs[2], 33.f);
 }
 
+// ── Rope ──────────────────────────────────────────────────────────────────────
+
+constexpr float kFreqBase = 10000.f;
+
+// Position 0 means angle 0 for every pair: the vector must be unchanged.
+TEST(ComputeEngineRopeTest, PositionZeroIsIdentity) {
+  ComputeEngine engine;
+  std::vector<float> v = {1.f, 2.f, -3.f, 0.5f, 0.f, -1.f, 7.f, 0.25f};
+  const std::vector<float> orig = v;
+
+  engine.Rope(AsMutableVec(v), /*position=*/0, kFreqBase,
+              /*dimension_count=*/4);
+
+  for (size_t i = 0; i < v.size(); ++i) {
+    EXPECT_FLOAT_EQ(v[i], orig[i]) << "i=" << i;
+  }
+}
+
+// With head_dim = 2 there is a single pair whose theta = base^0 = 1, so the
+// angle is exactly `position` radians. Rotating (1, 0) by m radians must give
+// (cos m, sin m) — this pins the interleaved pairing, the rotation direction,
+// and the sin/cos placement.
+TEST(ComputeEngineRopeTest, HandComputedSinglePair) {
+  ComputeEngine engine;
+  const int64_t m = 2;
+  std::vector<float> v = {1.f, 0.f};
+
+  engine.Rope(AsMutableVec(v), m, kFreqBase, /*dimension_count=*/2);
+
+  EXPECT_NEAR(v[0], std::cos(2.0), 1e-6);
+  EXPECT_NEAR(v[1], std::sin(2.0), 1e-6);
+}
+
+// A rotation never changes a vector's length, at any position.
+TEST(ComputeEngineRopeTest, PreservesNorm) {
+  ComputeEngine engine;
+  const std::vector<float> orig = {0.3f, -1.7f, 2.2f, 0.9f,
+                                   -0.4f, 5.f,  -2.f, 1.1f};
+  float norm2 = 0.f;
+  for (float x : orig) norm2 += x * x;
+
+  for (int64_t pos : {1, 17, 4096}) {
+    std::vector<float> v = orig;
+    engine.Rope(AsMutableVec(v), pos, kFreqBase, /*dimension_count=*/4);
+
+    float got = 0.f;
+    for (float x : v) got += x * x;
+    EXPECT_NEAR(got, norm2, 1e-3) << "pos=" << pos;
+  }
+}
+
+// The defining RoPE property: the dot product of a roped q at position m and a
+// roped k at position n depends only on n - m. Shifting both positions by the
+// same delta must not change the score.
+TEST(ComputeEngineRopeTest, DotDependsOnRelativePositionOnly) {
+  ComputeEngine engine;
+  const std::vector<float> q0 = {0.7f, -0.3f, 1.2f, 0.4f};
+  const std::vector<float> k0 = {-1.1f, 0.6f, 0.2f, 2.f};
+  const int64_t dim = 4;
+
+  auto roped_dot = [&](int64_t pos_q, int64_t pos_k) {
+    std::vector<float> q = q0;
+    std::vector<float> k = k0;
+    engine.Rope(AsMutableVec(q), pos_q, kFreqBase, dim);
+    engine.Rope(AsMutableVec(k), pos_k, kFreqBase, dim);
+    float dot = 0.f;
+    for (size_t i = 0; i < q.size(); ++i) dot += q[i] * k[i];
+    return dot;
+  };
+
+  const float base_dot = roped_dot(3, 7);         // distance 4
+  EXPECT_NEAR(roped_dot(0, 4), base_dot, 1e-4);   // same distance, shifted
+  EXPECT_NEAR(roped_dot(100, 104), base_dot, 1e-4);
+  // Different distance must (generically) give a different score.
+  EXPECT_GT(std::abs(roped_dot(3, 8) - base_dot), 1e-3);
+}
+
+// The frequency schedule restarts every head: two heads with identical content
+// must transform identically. Catches using the global pair index for theta.
+TEST(ComputeEngineRopeTest, PatternRepeatsPerHead) {
+  ComputeEngine engine;
+  const std::vector<float> head = {0.5f, -1.f, 2.f, 0.25f};
+  std::vector<float> v;
+  v.insert(v.end(), head.begin(), head.end());
+  v.insert(v.end(), head.begin(), head.end());  // two identical heads
+
+  engine.Rope(AsMutableVec(v), /*position=*/9, kFreqBase,
+              /*dimension_count=*/4);
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_FLOAT_EQ(v[i], v[4 + i]) << "i=" << i;
+  }
+}
+
 }  // namespace
 }  // namespace tlm
