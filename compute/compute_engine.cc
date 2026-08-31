@@ -58,8 +58,8 @@ void ComputeEngine::Add(MutableVectorView out, VectorView lhs, VectorView rhs) {
 }
 
 void ComputeEngine::MatMul(MutableVectorView out,
-                           VectorView lhs,
-                           MatrixView rhs) {}
+                           MatrixView lhs,
+                           VectorView rhs) {}
 
 void ComputeEngine::Attn(MutableVectorView out,
                          VectorView q,

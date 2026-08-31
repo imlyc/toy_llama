@@ -18,7 +18,7 @@ class ComputeEngine {
   std::unique_ptr<Storage> Alloc(int64_t size);
 
   void Add(MutableVectorView out, VectorView lhs, VectorView rhs);
-  void MatMul(MutableVectorView out, VectorView lhs, MatrixView rhs);
+  void MatMul(MutableVectorView out, MatrixView lhs, VectorView rhs);
 
   // Scaled dot product attention. a = softmax(q @ transpose(K) / sqrt(dk)) @ V.
   // Support different head count for GQA, MHA.
