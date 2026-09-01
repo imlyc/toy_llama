@@ -7,8 +7,8 @@
 namespace tlm {
 namespace {
 constexpr DTypeTrait kDTypeTraits[] = {
-  {4, 1, "f32"},
-  {sizeof(Float16) + 32 * sizeof(int8_t), 32, "q8_0"},
+    {4, 1, "f32"},
+    {sizeof(BlockQ8_0), sizeof(BlockQ8_0::data) / sizeof(int8_t), "q8_0"},
 };
 }  // namespace
 

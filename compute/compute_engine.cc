@@ -38,6 +38,50 @@ inline Map<MaybeConst<Mutable, VectorXf>> CreateVectorXf(
   Map<MaybeConst<Mutable, VectorXf>> vec(data.data(), data.size());
   return vec;
 }
+
+template <bool Mutable>
+inline Map<MaybeConst<Mutable, RowMatrixXf>> CreateRowMatrixXf(
+    TensorView<2, Mutable> view) {
+  CHECK_EQ(view.dtype, DType::F32);
+  using Float = MaybeConst<Mutable, float>;
+  std::span<Float> data = view.template As<Float>();
+  Map<MaybeConst<Mutable, RowMatrixXf>> mat(data.data(), view.shape[0],
+                                         view.shape[1]);
+  return mat;
+}
+
+void MatMulF32(MutableVectorView out, MatrixView lhs, VectorView rhs) {
+  CHECK_EQ(out.dtype, DType::F32);
+  CHECK_EQ(lhs.dtype, DType::F32);
+  CHECK_EQ(rhs.dtype, DType::F32);
+  Map<VectorXf> out_vec = CreateVectorXf(out);
+  Map<const RowMatrixXf> lhs_mat = CreateRowMatrixXf(lhs);
+  Map<const VectorXf> rhs_vec = CreateVectorXf(rhs);
+  out_vec.noalias() = lhs_mat * rhs_vec;
+}
+
+void MatMulQ8_0(MutableVectorView out, MatrixView lhs, VectorView rhs) {
+  CHECK_EQ(out.dtype, DType::F32);
+  CHECK_EQ(lhs.dtype, DType::Q8_0);
+  CHECK_EQ(rhs.dtype, DType::F32);
+  std::span<float> out_data = out.As<float>();
+  std::span<const BlockQ8_0> lhs_data = lhs.As<const BlockQ8_0>();
+  std::span<const float> rhs_data = rhs.As<const float>();
+
+  const int64_t block_count_per_row = lhs.shape[1] / sizeof(BlockQ8_0::data);
+
+  for (int64_t row = 0; row < lhs.shape[0]; row++) {
+    float acc = 0;
+    for (int64_t block = 0; block < block_count_per_row; block++) {
+      const BlockQ8_0& block_data = lhs_data[row * block_count_per_row + block];
+      for (int64_t index = 0; index < sizeof(BlockQ8_0::data); index++) {
+        int64_t col = block * sizeof(BlockQ8_0::data) + index;
+        acc += block_data.data[index] * block_data.scale * rhs_data[col];
+      }
+    }
+    out_data[row] = acc;
+  }
+}
 }  // namespace
 
 ComputeEngine::ComputeEngine() = default;
@@ -59,7 +103,25 @@ void ComputeEngine::Add(MutableVectorView out, VectorView lhs, VectorView rhs) {
 
 void ComputeEngine::MatMul(MutableVectorView out,
                            MatrixView lhs,
-                           VectorView rhs) {}
+                           VectorView rhs) {
+  CHECK_EQ(out.dtype, DType::F32);
+  CHECK_EQ(rhs.dtype, DType::F32);
+  CHECK_EQ(lhs.shape[1], rhs.shape[0]);
+  CHECK_EQ(out.shape[0], lhs.shape[0]);
+
+  switch (lhs.dtype) {
+    case DType::F32:
+      MatMulF32(out, lhs, rhs);
+      break;
+
+    case DType::Q8_0:
+      MatMulQ8_0(out, lhs, rhs);
+      break;
+
+    default:
+      LOG(FATAL) << "Unsupported mat mul dtype " << lhs.dtype;
+  }
+}
 
 void ComputeEngine::Attn(MutableVectorView out,
                          VectorView q,
