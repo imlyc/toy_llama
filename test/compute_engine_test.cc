@@ -193,6 +193,101 @@ TEST(ComputeEngineAddTest, InPlaceLhsAlias) {
   EXPECT_FLOAT_EQ(lhs[2], 33.f);
 }
 
+// ── MatMul ────────────────────────────────────────────────────────────────────
+// Convention: out = mat @ vec with mat shaped [out, in], rows contiguous
+// (GGUF weight layout; Q8_0 blocks run along the summed `in` dimension).
+
+MatrixView AsQ8Mat(const std::vector<BlockQ8_0>& blocks, int64_t rows,
+                   int64_t cols) {
+  return MatrixView::Create(DType::Q8_0,
+                            reinterpret_cast<const std::byte*>(blocks.data()),
+                            rows, cols);
+}
+
+TEST(ComputeEngineMatMulTest, F32HandComputed) {
+  ComputeEngine engine;
+  // W = [out=2, in=3], rows contiguous; out = W @ x.
+  std::vector<float> w = {1.f, 2.f, 3.f,
+                          4.f, 5.f, 6.f};
+  std::vector<float> x = {1.f, 0.5f, -1.f};
+  std::vector<float> out = {99.f, 99.f};  // sentinel: MatMul must overwrite
+
+  engine.MatMul(AsMutableVec(out), AsMat(w, 2, 3), AsVec(x));
+
+  EXPECT_FLOAT_EQ(out[0], -1.f);   // 1 + 1 - 3
+  EXPECT_FLOAT_EQ(out[1], 0.5f);   // 4 + 2.5 - 6
+}
+
+// Q8 mat is [out=2, in=32]: one block per row, blocks along the summed `in`
+// dimension. data[i] = i with x alternating 0/1 makes the dot order-sensitive.
+TEST(ComputeEngineMatMulTest, Q8SingleBlockPerRow) {
+  ComputeEngine engine;
+  std::vector<BlockQ8_0> blocks(2);
+  blocks[0].scale = 0.5f;
+  blocks[1].scale = 2.f;
+  for (int i = 0; i < 32; ++i) {
+    blocks[0].data[i] = static_cast<int8_t>(i);
+    blocks[1].data[i] = 1;
+  }
+  std::vector<float> x(32);
+  for (int i = 0; i < 32; ++i) x[i] = static_cast<float>(i % 2);  // odd picks
+  std::vector<float> out = {99.f, 99.f};
+
+  engine.MatMul(AsMutableVec(out), AsQ8Mat(blocks, 2, 32), AsVec(x));
+
+  // Row 0: 0.5 * (sum of odd i in [0,32)) = 0.5 * 256.
+  EXPECT_FLOAT_EQ(out[0], 128.f);
+  // Row 1: 2 * (number of odd i) = 2 * 16.
+  EXPECT_FLOAT_EQ(out[1], 32.f);
+}
+
+// Two blocks per row (in = 64) with different scales: catches block-count and
+// block-indexing mistakes.
+TEST(ComputeEngineMatMulTest, Q8MultiBlockRow) {
+  ComputeEngine engine;
+  std::vector<BlockQ8_0> blocks(2);  // one row: out = 1, in = 64
+  blocks[0].scale = 1.f;
+  blocks[1].scale = 2.f;
+  for (int i = 0; i < 32; ++i) {
+    blocks[0].data[i] = 1;
+    blocks[1].data[i] = 1;
+  }
+  std::vector<float> x(64, 1.f);
+  std::vector<float> out = {99.f};
+
+  engine.MatMul(AsMutableVec(out), AsQ8Mat(blocks, 1, 64), AsVec(x));
+
+  EXPECT_FLOAT_EQ(out[0], 96.f);  // 1*32 + 2*32
+}
+
+// With scale = 1 and small integer weights, the Q8 path must agree exactly
+// with the F32 path on the same logical [out, in] matrix.
+TEST(ComputeEngineMatMulTest, Q8MatchesF32) {
+  ComputeEngine engine;
+  const int64_t rows = 3, cols = 32;  // out = 3, in = 32
+  std::vector<BlockQ8_0> blocks(rows);
+  std::vector<float> w_f32(rows * cols);
+  for (int64_t r = 0; r < rows; ++r) {
+    blocks[r].scale = 1.f;
+    for (int64_t i = 0; i < cols; ++i) {
+      const int8_t q = static_cast<int8_t>((r * 7 + i * 3) % 21 - 10);
+      blocks[r].data[i] = q;
+      w_f32[r * cols + i] = static_cast<float>(q);
+    }
+  }
+  std::vector<float> x(cols);
+  for (int64_t i = 0; i < cols; ++i) x[i] = 0.25f * static_cast<float>(i - 16);
+
+  std::vector<float> out_q8(rows, 99.f);
+  std::vector<float> out_f32(rows, -99.f);
+  engine.MatMul(AsMutableVec(out_q8), AsQ8Mat(blocks, rows, cols), AsVec(x));
+  engine.MatMul(AsMutableVec(out_f32), AsMat(w_f32, rows, cols), AsVec(x));
+
+  for (int64_t r = 0; r < rows; ++r) {
+    EXPECT_FLOAT_EQ(out_q8[r], out_f32[r]) << "row " << r;
+  }
+}
+
 // ── Rope ──────────────────────────────────────────────────────────────────────
 
 constexpr float kFreqBase = 10000.f;
