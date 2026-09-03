@@ -25,6 +25,11 @@ class ComputeEngine {
   void Attn(MutableVectorView out, VectorView q, MatrixView k, MatrixView v,
             int64_t head_count_q, int64_t head_count_kv);
 
+  void RmsNorm(MutableVectorView out,
+               VectorView input,
+               VectorView gamma,
+               float epsilon);
+
   // In place softmax.
   void Softmax(MutableVectorView view);
 

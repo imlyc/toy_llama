@@ -193,6 +193,23 @@ void ComputeEngine::Attn(MutableVectorView out,
   }
 }
 
+void ComputeEngine::RmsNorm(MutableVectorView out,
+                            VectorView input,
+                            VectorView gamma,
+                            float epsilon) {
+  CHECK_EQ(out.dtype, DType::F32);
+  CHECK_EQ(input.dtype, DType::F32);
+  CHECK_EQ(gamma.dtype, DType::F32);
+  CHECK_EQ(out.shape[0], input.shape[0]);
+  CHECK_EQ(input.shape[0], gamma.shape[0]);
+
+  Map<VectorXf> out_vec = CreateVectorXf(out);
+  Map<const VectorXf> input_vec = CreateVectorXf(input);
+  Map<const VectorXf> gamma_vec = CreateVectorXf(gamma);
+  float rms = sqrt(input_vec.squaredNorm() / input_vec.size() + epsilon);
+  out_vec.array() = input_vec.array() * gamma_vec.array() / rms;
+}
+
 void ComputeEngine::Softmax(MutableVectorView view) {
   Map<VectorXf> view_vec = CreateVectorXf(view);
   SoftmaxHelper(view_vec);
