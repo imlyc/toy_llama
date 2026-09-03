@@ -288,6 +288,91 @@ TEST(ComputeEngineMatMulTest, Q8MatchesF32) {
   }
 }
 
+// ── RmsNorm ───────────────────────────────────────────────────────────────────
+
+constexpr float kRmsEps = 1e-5f;
+
+// x = {3, 4}: mean of squares = 12.5, rms = sqrt(12.5) ≈ 3.5355339.
+// With gamma = {1, 2}: out = {3/rms, 2*4/rms}.
+TEST(ComputeEngineRmsNormTest, HandComputed) {
+  ComputeEngine engine;
+  std::vector<float> x = {3.f, 4.f};
+  std::vector<float> gamma = {1.f, 2.f};
+  std::vector<float> out = {99.f, 99.f};  // sentinel: must overwrite
+
+  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), /*epsilon=*/0.f);
+
+  EXPECT_NEAR(out[0], 0.84852814f, 1e-6);
+  EXPECT_NEAR(out[1], 2.26274170f, 1e-6);
+}
+
+// rms(c*x) = c*rms(x), so the c cancels: scaling the input must not change
+// the output (up to epsilon). The defining property of the normalization.
+TEST(ComputeEngineRmsNormTest, ScaleInvariant) {
+  ComputeEngine engine;
+  const std::vector<float> x = {0.5f, -1.5f, 2.f, 0.25f};
+  const std::vector<float> gamma = {1.f, 0.5f, 2.f, -1.f};
+
+  std::vector<float> base(4), scaled_in(4), scaled_out(4);
+  engine.RmsNorm(AsMutableVec(base), AsVec(x), AsVec(gamma), kRmsEps);
+
+  for (float c : {2.f, 100.f}) {
+    for (int i = 0; i < 4; ++i) scaled_in[i] = c * x[i];
+    engine.RmsNorm(AsMutableVec(scaled_out), AsVec(scaled_in), AsVec(gamma),
+                   kRmsEps);
+    for (int i = 0; i < 4; ++i) {
+      EXPECT_NEAR(scaled_out[i], base[i], 1e-4) << "c=" << c << " i=" << i;
+    }
+  }
+}
+
+// With gamma = 1 the output must have RMS ≈ 1 — normalization actually
+// normalizes.
+TEST(ComputeEngineRmsNormTest, GammaOneGivesUnitRms) {
+  ComputeEngine engine;
+  std::vector<float> x = {10.f, -20.f, 5.f, 0.f, 7.5f, -1.f, 3.f, 40.f};
+  std::vector<float> gamma(8, 1.f);
+  std::vector<float> out(8, 0.f);
+
+  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), kRmsEps);
+
+  float mean_sq = 0.f;
+  for (float v : out) mean_sq += v * v;
+  mean_sq /= out.size();
+  EXPECT_NEAR(mean_sq, 1.f, 1e-4);
+}
+
+// RmsNorm must not modify its input — DecoderBlock reuses the un-normed input
+// for the residual add.
+TEST(ComputeEngineRmsNormTest, InputUntouched) {
+  ComputeEngine engine;
+  const std::vector<float> orig = {1.f, -2.f, 3.f, -4.f};
+  std::vector<float> x = orig;
+  std::vector<float> gamma = {1.f, 1.f, 1.f, 1.f};
+  std::vector<float> out(4);
+
+  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), kRmsEps);
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_FLOAT_EQ(x[i], orig[i]) << "i=" << i;
+  }
+}
+
+// All-zero input: epsilon must prevent 0/0 — output is zeros, not NaN.
+TEST(ComputeEngineRmsNormTest, ZeroInputNoNan) {
+  ComputeEngine engine;
+  std::vector<float> x(4, 0.f);
+  std::vector<float> gamma(4, 1.f);
+  std::vector<float> out(4, 99.f);
+
+  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), kRmsEps);
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_TRUE(std::isfinite(out[i])) << "i=" << i;
+    EXPECT_FLOAT_EQ(out[i], 0.f) << "i=" << i;
+  }
+}
+
 // ── Rope ──────────────────────────────────────────────────────────────────────
 
 constexpr float kFreqBase = 10000.f;
