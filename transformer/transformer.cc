@@ -37,9 +37,10 @@ std::span<const float> Transformer::Predict(Token token) {
   }
 
   VectorView final_rms_output = final_rms_norm_.Forward(block_input);
-  VectorView linear_output = linear_output_.Forward(final_rms_output);
 
-  logits_.CopyFrom(linear_output);
+  // Linear layer.
+  compute_engine_.MatMul(logits_, token_embeddings_, final_rms_output);
+
   compute_engine_.Softmax(logits_);
 
   return logits_.As<const float>();

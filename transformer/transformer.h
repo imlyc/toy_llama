@@ -7,7 +7,6 @@
 #include "model/token.h"
 #include "tensor/tensor_view.h"
 #include "transformer/decoder_block.h"
-#include "transformer/linear_layer.h"
 #include "transformer/rms_norm_layer.h"
 
 namespace tlm {
@@ -28,9 +27,10 @@ class Transformer {
   const Model& model_;
   ComputeEngine compute_engine_;
 
+  MatrixView token_embeddings_;
+
   std::vector<DecoderBlock> decoder_blocks_;
   RmsNormLayer final_rms_norm_;
-  LinearLayer linear_output_;
 
   std::unique_ptr<Storage> logits_storage_;
   MutableVectorView logits_;
