@@ -210,6 +210,17 @@ void ComputeEngine::RmsNorm(MutableVectorView out,
   out_vec.array() = input_vec.array() * gamma_vec.array() / rms;
 }
 
+void ComputeEngine::SwiGluMul(MutableVectorView gate, VectorView up) {
+  CHECK_EQ(gate.dtype, DType::F32);
+  CHECK_EQ(up.dtype, DType::F32);
+  CHECK_EQ(gate.shape[0], up.shape[0]);
+
+  Map<VectorXf> gate_vec = CreateVectorXf(gate);
+  Map<const VectorXf> up_vec = CreateVectorXf(up);
+  gate_vec.array() =
+      gate_vec.array() / (1.f + (-gate_vec.array()).exp()) * up_vec.array();
+}
+
 void ComputeEngine::Softmax(MutableVectorView view) {
   Map<VectorXf> view_vec = CreateVectorXf(view);
   SoftmaxHelper(view_vec);

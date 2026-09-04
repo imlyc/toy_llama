@@ -8,7 +8,8 @@ DecoderBlock::DecoderBlock(ComputeEngine& compute_engine)
     : compute_engine_(compute_engine),
       attn_norm_(compute_engine),
       group_query_attn_(compute_engine),
-      ffn_norm_(compute_engine) {}
+      ffn_norm_(compute_engine),
+      swiglu_ffn_block_(compute_engine) {}
 DecoderBlock::~DecoderBlock() = default;
 
 DecoderBlock::DecoderBlock(DecoderBlock&&) = default;

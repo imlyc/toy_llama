@@ -30,6 +30,10 @@ class ComputeEngine {
                VectorView gamma,
                float epsilon);
 
+  // In place swiglu gate + elementwise mul up
+  // gate = swiglu(gate) mul up
+  void SwiGluMul(MutableVectorView gate, VectorView up);
+
   // In place softmax.
   void Softmax(MutableVectorView view);
 
