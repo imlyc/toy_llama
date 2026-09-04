@@ -373,6 +373,77 @@ TEST(ComputeEngineRmsNormTest, ZeroInputNoNan) {
   }
 }
 
+// ── SwiGluMul ─────────────────────────────────────────────────────────────────
+// gate = SiLU(gate) ⊙ up, in place on gate. SiLU(z) = z / (1 + e^-z).
+
+// up = 1 reduces the op to pure SiLU: pins the activation values themselves.
+TEST(ComputeEngineSwiGluMulTest, PureSiluWithUnitUp) {
+  ComputeEngine engine;
+  std::vector<float> gate = {0.f, 1.f, -1.f, 2.f};
+  std::vector<float> up(4, 1.f);
+
+  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+
+  EXPECT_NEAR(gate[0], 0.f, 1e-6);
+  EXPECT_NEAR(gate[1], 0.7310586f, 1e-6);   // 1 * sigmoid(1)
+  EXPECT_NEAR(gate[2], -0.2689414f, 1e-6);  // -1 * sigmoid(-1)
+  EXPECT_NEAR(gate[3], 1.7615942f, 1e-6);   // 2 * sigmoid(2)
+}
+
+// SiLU must apply to the GATE operand, not up. gate={1,2}, up={2,1} gives
+// {silu(1)*2, silu(2)*1}; a swapped implementation gives the reversed pair.
+TEST(ComputeEngineSwiGluMulTest, SiluAppliesToGateNotUp) {
+  ComputeEngine engine;
+  std::vector<float> gate = {1.f, 2.f};
+  std::vector<float> up = {2.f, 1.f};
+
+  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+
+  EXPECT_NEAR(gate[0], 1.4621172f, 1e-6);   // silu(1) * 2
+  EXPECT_NEAR(gate[1], 1.7615942f, 1e-6);   // silu(2) * 1
+}
+
+// A zero gate closes the channel completely, regardless of up's magnitude.
+TEST(ComputeEngineSwiGluMulTest, ZeroGateClosesChannel) {
+  ComputeEngine engine;
+  std::vector<float> gate = {0.f, 0.f};
+  std::vector<float> up = {1e6f, -1e6f};
+
+  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+
+  EXPECT_FLOAT_EQ(gate[0], 0.f);
+  EXPECT_FLOAT_EQ(gate[1], 0.f);
+}
+
+// The up operand is read-only; only gate is modified.
+TEST(ComputeEngineSwiGluMulTest, UpUntouched) {
+  ComputeEngine engine;
+  std::vector<float> gate = {1.f, -2.f, 3.f};
+  const std::vector<float> up_orig = {0.5f, 2.f, -1.f};
+  std::vector<float> up = up_orig;
+
+  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_FLOAT_EQ(up[i], up_orig[i]) << "i=" << i;
+  }
+}
+
+// Large magnitudes must stay finite: exp overflow/underflow lands on the
+// correct SiLU limits (0 for very negative, identity for very positive).
+TEST(ComputeEngineSwiGluMulTest, ExtremeInputsFinite) {
+  ComputeEngine engine;
+  std::vector<float> gate = {-100.f, 100.f};
+  std::vector<float> up = {1.f, 1.f};
+
+  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+
+  EXPECT_TRUE(std::isfinite(gate[0]));
+  EXPECT_TRUE(std::isfinite(gate[1]));
+  EXPECT_NEAR(gate[0], 0.f, 1e-5);      // silu(-100) ≈ 0
+  EXPECT_NEAR(gate[1], 100.f, 1e-3);    // silu(100) ≈ 100
+}
+
 // ── Rope ──────────────────────────────────────────────────────────────────────
 
 constexpr float kFreqBase = 10000.f;
