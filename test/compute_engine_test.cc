@@ -382,9 +382,10 @@ TEST(ComputeEngineRopeTest, PositionZeroIsIdentity) {
   ComputeEngine engine;
   std::vector<float> v = {1.f, 2.f, -3.f, 0.5f, 0.f, -1.f, 7.f, 0.25f};
   const std::vector<float> orig = v;
+  const std::vector<float> unit_freqs = {1.f, 1.f};
 
   engine.Rope(AsMutableVec(v), /*position=*/0, kFreqBase,
-              /*dimension_count=*/4);
+              /*dimension_count=*/4, AsVec(unit_freqs));
 
   for (size_t i = 0; i < v.size(); ++i) {
     EXPECT_FLOAT_EQ(v[i], orig[i]) << "i=" << i;
@@ -399,8 +400,10 @@ TEST(ComputeEngineRopeTest, HandComputedSinglePair) {
   ComputeEngine engine;
   const int64_t m = 2;
   std::vector<float> v = {1.f, 0.f};
+  const std::vector<float> unit_freqs = {1.f};
 
-  engine.Rope(AsMutableVec(v), m, kFreqBase, /*dimension_count=*/2);
+  engine.Rope(AsMutableVec(v), m, kFreqBase, /*dimension_count=*/2,
+              AsVec(unit_freqs));
 
   EXPECT_NEAR(v[0], std::cos(2.0), 1e-6);
   EXPECT_NEAR(v[1], std::sin(2.0), 1e-6);
@@ -414,9 +417,11 @@ TEST(ComputeEngineRopeTest, PreservesNorm) {
   float norm2 = 0.f;
   for (float x : orig) norm2 += x * x;
 
+  const std::vector<float> unit_freqs = {1.f, 1.f};
   for (int64_t pos : {1, 17, 4096}) {
     std::vector<float> v = orig;
-    engine.Rope(AsMutableVec(v), pos, kFreqBase, /*dimension_count=*/4);
+    engine.Rope(AsMutableVec(v), pos, kFreqBase, /*dimension_count=*/4,
+                AsVec(unit_freqs));
 
     float got = 0.f;
     for (float x : v) got += x * x;
@@ -432,12 +437,15 @@ TEST(ComputeEngineRopeTest, DotDependsOnRelativePositionOnly) {
   const std::vector<float> q0 = {0.7f, -0.3f, 1.2f, 0.4f};
   const std::vector<float> k0 = {-1.1f, 0.6f, 0.2f, 2.f};
   const int64_t dim = 4;
+  // Non-uniform factors: the relative-position property must hold for ANY
+  // frequency schedule, scaled or not.
+  const std::vector<float> freqs = {1.f, 2.f};
 
   auto roped_dot = [&](int64_t pos_q, int64_t pos_k) {
     std::vector<float> q = q0;
     std::vector<float> k = k0;
-    engine.Rope(AsMutableVec(q), pos_q, kFreqBase, dim);
-    engine.Rope(AsMutableVec(k), pos_k, kFreqBase, dim);
+    engine.Rope(AsMutableVec(q), pos_q, kFreqBase, dim, AsVec(freqs));
+    engine.Rope(AsMutableVec(k), pos_k, kFreqBase, dim, AsVec(freqs));
     float dot = 0.f;
     for (size_t i = 0; i < q.size(); ++i) dot += q[i] * k[i];
     return dot;
@@ -459,12 +467,30 @@ TEST(ComputeEngineRopeTest, PatternRepeatsPerHead) {
   v.insert(v.end(), head.begin(), head.end());
   v.insert(v.end(), head.begin(), head.end());  // two identical heads
 
+  const std::vector<float> unit_freqs = {1.f, 1.f};
   engine.Rope(AsMutableVec(v), /*position=*/9, kFreqBase,
-              /*dimension_count=*/4);
+              /*dimension_count=*/4, AsVec(unit_freqs));
 
   for (int i = 0; i < 4; ++i) {
     EXPECT_FLOAT_EQ(v[i], v[4 + i]) << "i=" << i;
   }
+}
+
+// rope_freqs divides each pair's theta. With head_dim 4 and freq_base 4:
+// theta_0 = 1, theta_1 = 4^(-1/2) = 0.5. Factors {1, 2} leave pair 0's angle
+// at position*1 and halve pair 1's to position*0.25.
+TEST(ComputeEngineRopeTest, FreqFactorsScaleAngles) {
+  ComputeEngine engine;
+  std::vector<float> v = {1.f, 0.f, 1.f, 0.f};
+  const std::vector<float> freqs = {1.f, 2.f};
+
+  engine.Rope(AsMutableVec(v), /*position=*/2, /*freq_base=*/4.f,
+              /*dimension_count=*/4, AsVec(freqs));
+
+  EXPECT_NEAR(v[0], std::cos(2.0), 1e-6);   // pair 0: angle = 2 * 1 / 1
+  EXPECT_NEAR(v[1], std::sin(2.0), 1e-6);
+  EXPECT_NEAR(v[2], std::cos(0.5), 1e-6);   // pair 1: angle = 2 * 0.5 / 2
+  EXPECT_NEAR(v[3], std::sin(0.5), 1e-6);
 }
 
 }  // namespace
