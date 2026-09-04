@@ -36,6 +36,7 @@ class GroupQueryAttnBlock {
   MatrixView wk_;
   MatrixView wv_;
   MatrixView wo_;
+  VectorView rope_freqs_;
 
   std::unique_ptr<Storage> query_storage_;
   MutableVectorView query_;

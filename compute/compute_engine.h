@@ -37,7 +37,8 @@ class ComputeEngine {
   void Rope(MutableVectorView view,
             int64_t position,
             float freq_base,
-            int dimension_count);
+            int dimension_count,
+            VectorView rope_freqs);
 };
 
 }  // namespace tlm

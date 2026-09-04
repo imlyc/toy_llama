@@ -27,11 +27,13 @@ GroupQueryAttnBlock::GroupQueryAttnBlock(GroupQueryAttnBlock&&) = default;
 
 VectorView GroupQueryAttnBlock::Forward(VectorView input) {
   compute_.MatMul(query_, wq_, input);
-  compute_.Rope(query_, token_index_, rope_freq_base_, rope_dimension_count_);
+  compute_.Rope(query_, token_index_, rope_freq_base_, rope_dimension_count_,
+                rope_freqs_);
 
   MutableVectorView key = k_cache_.At(token_index_);
   compute_.MatMul(key, wk_, input);
-  compute_.Rope(key, token_index_, rope_freq_base_, rope_dimension_count_);
+  compute_.Rope(key, token_index_, rope_freq_base_, rope_dimension_count_,
+                rope_freqs_);
 
   MutableVectorView value = v_cache_.At(token_index_);
   compute_.MatMul(value, wv_, input);

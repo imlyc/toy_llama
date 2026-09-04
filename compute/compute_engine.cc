@@ -218,17 +218,21 @@ void ComputeEngine::Softmax(MutableVectorView view) {
 void ComputeEngine::Rope(MutableVectorView view,
                          int64_t position,
                          float freq_base,
-                         int dimension_count) {
+                         int dimension_count,
+                         VectorView rope_freqs) {
   CHECK_EQ(view.dtype, DType::F32);
   CHECK_EQ(view.shape[0] % dimension_count, 0);
+  CHECK_EQ(rope_freqs.shape[0], dimension_count / 2);
   std::span<float> data = view.As<float>();
+  std::span<const float> rope_freqs_data = rope_freqs.As<const float>();
   int64_t pair_count = data.size() / 2;
   for (int64_t p = 0; p < pair_count; p++) {
     float a = data[2 * p];
     float b = data[2 * p + 1];
-    float angle =
-        position * std::pow(freq_base, -2.f * (p % (dimension_count / 2)) /
-                                           dimension_count);
+    int64_t p_mod = p % (dimension_count / 2);
+    float angle = position *
+                  std::pow(freq_base, -2.f * p_mod / dimension_count) /
+                  rope_freqs_data[p_mod];
     float cosine = std::cos(angle);
     float sine = std::sin(angle);
     data[2 * p] = a * cosine - b * sine;
