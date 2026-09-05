@@ -288,6 +288,74 @@ TEST(ComputeEngineMatMulTest, Q8MatchesF32) {
   }
 }
 
+// ── Copy ──────────────────────────────────────────────────────────────────────
+// F32 src: plain copy. Q8_0 src: dequantize into the F32 dst.
+
+TEST(ComputeEngineCopyTest, F32CopiesValues) {
+  ComputeEngine engine;
+  const std::vector<float> src_orig = {1.f, -2.5f, 0.f, 42.f};
+  std::vector<float> src = src_orig;
+  std::vector<float> dst(4, 99.f);  // sentinel: must be overwritten
+
+  engine.Copy(AsMutableVec(dst), AsVec(src));
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_FLOAT_EQ(dst[i], src_orig[i]) << "i=" << i;
+    EXPECT_FLOAT_EQ(src[i], src_orig[i]) << "src modified at i=" << i;
+  }
+}
+
+// Q8_0 source: out[b*32 + i] = scale_b * data_b[i], including negatives.
+TEST(ComputeEngineCopyTest, Q8DequantHandComputed) {
+  ComputeEngine engine;
+  std::vector<BlockQ8_0> blocks(2);
+  blocks[0].scale = 0.5f;
+  blocks[1].scale = 2.f;
+  for (int i = 0; i < 32; ++i) {
+    blocks[0].data[i] = static_cast<int8_t>(i - 16);  // negatives included
+    blocks[1].data[i] = -3;
+  }
+  std::vector<float> dst(64, 99.f);
+
+  VectorView q8 = VectorView::Create(
+      DType::Q8_0, reinterpret_cast<const std::byte*>(blocks.data()), 64);
+  engine.Copy(AsMutableVec(dst), q8);
+
+  EXPECT_FLOAT_EQ(dst[0], -8.f);    // 0.5 * (0 - 16)
+  EXPECT_FLOAT_EQ(dst[16], 0.f);    // 0.5 * 0
+  EXPECT_FLOAT_EQ(dst[31], 7.5f);   // 0.5 * 15
+  for (int i = 32; i < 64; ++i) {
+    EXPECT_FLOAT_EQ(dst[i], -6.f) << "i=" << i;  // 2 * -3
+  }
+}
+
+// Cross-check against the Q8 matmul: dequantizing a row and dotting it with x
+// must match MatMul of the same row (up to accumulation-order rounding).
+TEST(ComputeEngineCopyTest, Q8DequantMatchesMatMul) {
+  ComputeEngine engine;
+  std::vector<BlockQ8_0> blocks(2);  // one row, in = 64
+  blocks[0].scale = 0.25f;
+  blocks[1].scale = 1.5f;
+  for (int i = 0; i < 32; ++i) {
+    blocks[0].data[i] = static_cast<int8_t>((i * 5) % 17 - 8);
+    blocks[1].data[i] = static_cast<int8_t>((i * 3) % 11 - 5);
+  }
+  std::vector<float> x(64);
+  for (int i = 0; i < 64; ++i) x[i] = 0.1f * static_cast<float>(i % 7 - 3);
+
+  // Path 1: MatMul on the 1x64 Q8 matrix.
+  std::vector<float> matmul_out = {99.f};
+  engine.MatMul(AsMutableVec(matmul_out), AsQ8Mat(blocks, 1, 64), AsVec(x));
+
+  // Path 2: Copy-dequant the row, then dot manually.
+  std::vector<float> dequant(64, 99.f);
+  engine.Copy(AsMutableVec(dequant), AsQ8Mat(blocks, 1, 64).At(0));
+  float dot = 0.f;
+  for (int i = 0; i < 64; ++i) dot += dequant[i] * x[i];
+
+  EXPECT_NEAR(matmul_out[0], dot, 1e-4);
+}
+
 // ── RmsNorm ───────────────────────────────────────────────────────────────────
 
 constexpr float kRmsEps = 1e-5f;
