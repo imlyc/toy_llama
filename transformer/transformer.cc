@@ -10,12 +10,14 @@ namespace tlm {
 Transformer::Transformer(const Model& model)
     : model_(model),
       token_embeddings_(model_.GetTokenEmbeddings()),
-      final_rms_norm_(compute_engine_) {
-  int embedding_length = model_.GetTokenEmbeddingLength();
+      final_rms_norm_(compute_engine_,
+                      model_.GetOutputNormGamma(),
+                      model_.GetLayerNormEpsilon()) {
+  const int embedding_length = model_.GetTokenEmbeddingLength();
   embedding_storage_ = compute_engine_.Alloc(embedding_length);
   embedding_ = embedding_storage_->AsVector(embedding_length);
 
-  int decoder_block_count = model_.GetDecoderBlockCount();
+  const int decoder_block_count = model_.GetDecoderBlockCount();
   for (int i = 0; i < decoder_block_count; i++) {
     decoder_blocks_.emplace_back(compute_engine_);
   }

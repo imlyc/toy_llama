@@ -27,8 +27,12 @@ class Model {
   int GetDecoderBlockCount() const;
   int GetVocabSize() const;
 
+  VectorView GetOutputNormGamma() const;
+  float GetLayerNormEpsilon() const;
+
  private:
   MatrixView GgufMatrix2MatrixView(std::string_view key) const;
+  VectorView GgufVector2VectorView(std::string_view key) const;
 
   ScopedMmapFile model_file_;
   std::unique_ptr<GgufParser> parser_;

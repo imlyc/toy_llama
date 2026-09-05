@@ -69,6 +69,14 @@ int Model::GetVocabSize() const {
   return CheckedCast<int>(parser_->GetMetadata<uint32_t>("llama.vocab_size"));
 }
 
+VectorView Model::GetOutputNormGamma() const {
+  return GgufVector2VectorView("output_norm.weight");
+}
+
+float Model::GetLayerNormEpsilon() const {
+  return parser_->GetMetadata<float>("llama.attention.layer_norm_rms_epsilon");
+}
+
 MatrixView Model::GgufMatrix2MatrixView(std::string_view key) const {
   const GgufParser::TensorInfo& info = parser_->GetTensorInfo(key);
   const std::byte* data = parser_->GetTensorData(info);
@@ -77,6 +85,16 @@ MatrixView Model::GgufMatrix2MatrixView(std::string_view key) const {
   CHECK_EQ(info.dimensions.size(), 2);
   return MatrixView::Create(dtype, data,
                             CheckedCast<int64_t>(info.dimensions[1]),
+                            CheckedCast<int64_t>(info.dimensions[0]));
+}
+
+VectorView Model::GgufVector2VectorView(std::string_view key) const {
+  const GgufParser::TensorInfo& info = parser_->GetTensorInfo(key);
+  const std::byte* data = parser_->GetTensorData(info);
+
+  DType dtype = GgmlType2DType(info.type);
+  CHECK_EQ(info.dimensions.size(), 1);
+  return VectorView::Create(dtype, data,
                             CheckedCast<int64_t>(info.dimensions[0]));
 }
 }  // namespace tlm

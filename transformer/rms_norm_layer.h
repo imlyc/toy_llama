@@ -8,7 +8,7 @@ class Storage;
 
 class RmsNormLayer {
  public:
-  explicit RmsNormLayer(ComputeEngine& compute);
+  RmsNormLayer(ComputeEngine& compute, VectorView gamma, float epsilon);
   ~RmsNormLayer();
 
   RmsNormLayer(RmsNormLayer&&);
@@ -17,8 +17,8 @@ class RmsNormLayer {
 
  private:
   ComputeEngine& compute_;
-  VectorView gamma_;
-  const float epsilon_ = 0.000009999999747378752;
+  const VectorView gamma_;
+  const float epsilon_;
 
   std::unique_ptr<Storage> output_storage_;
   MutableVectorView output_;
