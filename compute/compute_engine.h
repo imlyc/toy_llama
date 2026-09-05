@@ -17,6 +17,9 @@ class ComputeEngine {
 
   std::unique_ptr<Storage> Alloc(int64_t size);
 
+  // Copy data from `src` to `dst`. `dst` is a memory allocated by Alloc.
+  void Copy(MutableVectorView dst, VectorView src);
+
   void Add(MutableVectorView out, VectorView lhs, VectorView rhs);
   void MatMul(MutableVectorView out, MatrixView lhs, VectorView rhs);
 

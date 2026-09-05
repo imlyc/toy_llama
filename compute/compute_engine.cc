@@ -82,6 +82,22 @@ void MatMulQ8_0(MutableVectorView out, MatrixView lhs, VectorView rhs) {
     out_data[row] = acc;
   }
 }
+
+void Dequant(MutableVectorView out, VectorView in) {
+  CHECK_EQ(out.dtype, DType::F32);
+  CHECK_EQ(in.dtype, DType::Q8_0);
+  CHECK_EQ(out.shape[0], in.shape[0]);
+  CHECK_EQ(in.shape[0] % sizeof(BlockQ8_0::data), 0);
+
+  std::span<float> out_data = out.As<float>();
+  std::span<const BlockQ8_0> in_data = in.As<const BlockQ8_0>();
+  for (size_t b = 0; b < in_data.size(); b++) {
+    const BlockQ8_0& block = in_data[b];
+    for (size_t i = 0; i < sizeof(BlockQ8_0::data); i++) {
+      out_data[b * sizeof(BlockQ8_0::data) + i] = block.scale * block.data[i];
+    }
+  }
+}
 }  // namespace
 
 ComputeEngine::ComputeEngine() = default;
@@ -89,6 +105,24 @@ ComputeEngine::~ComputeEngine() = default;
 
 std::unique_ptr<Storage> ComputeEngine::Alloc(int64_t size) {
   return std::make_unique<Storage>(size);
+}
+
+void ComputeEngine::Copy(MutableVectorView dst, VectorView src) {
+  CHECK_EQ(dst.dtype, DType::F32);
+  CHECK_EQ(dst.shape[0], src.shape[0]);
+
+  switch (src.dtype) {
+    case DType::F32:
+      dst.CopyFrom(src);
+      break;
+
+    case DType::Q8_0:
+      Dequant(dst, src);
+      break;
+
+    default:
+      LOG(FATAL) << "Unsupported src type " << src.dtype;
+  }
 }
 
 void ComputeEngine::Add(MutableVectorView out, VectorView lhs, VectorView rhs) {

@@ -8,7 +8,13 @@
 namespace tlm {
 
 Transformer::Transformer(const Model& model)
-    : model_(model), final_rms_norm_(compute_engine_) {
+    : model_(model),
+      token_embeddings_(model_.GetTokenEmbeddings()),
+      final_rms_norm_(compute_engine_) {
+  int embedding_length = model_.GetTokenEmbeddingLength();
+  embedding_storage_ = compute_engine_.Alloc(embedding_length);
+  embedding_ = embedding_storage_->AsVector(embedding_length);
+
   int decoder_block_count = model_.GetDecoderBlockCount();
   for (int i = 0; i < decoder_block_count; i++) {
     decoder_blocks_.emplace_back(compute_engine_);
@@ -47,7 +53,10 @@ std::span<const float> Transformer::Predict(Token token) {
 }
 
 VectorView Transformer::LookupTokenEmbedding(Token token) {
-  return model_.GetTokenEmbedding(token);
+  CHECK_NE(token.id, Token::INVALID.id);
+  VectorView embedding = token_embeddings_.At(token.id);
+  compute_engine_.Copy(embedding_, embedding);
+  return embedding_.View();
 }
 
 }  // namespace tlm

@@ -18,7 +18,8 @@ class Model {
 
   const std::vector<std::string_view>& GetTokenizerMerges() const;
   const std::vector<std::string_view>& GetTokenizerTokens() const;
-  VectorView GetTokenEmbedding(Token token) const;
+  MatrixView GetTokenEmbeddings() const;
+  int GetTokenEmbeddingLength() const;
 
   Token GetBosToken() const;
   Token GetEosToken() const;
@@ -27,7 +28,7 @@ class Model {
   int GetVocabSize() const;
 
  private:
-  VectorView GgufMatrixRow2VectorView(std::string_view key, int row) const;
+  MatrixView GgufMatrix2MatrixView(std::string_view key) const;
 
   ScopedMmapFile model_file_;
   std::unique_ptr<GgufParser> parser_;

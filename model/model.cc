@@ -40,10 +40,13 @@ const std::vector<std::string_view>& Model::GetTokenizerTokens() const {
       "tokenizer.ggml.tokens");
 }
 
-VectorView Model::GetTokenEmbedding(Token token) const {
-  CHECK_NE(token.id, Token::INVALID.id);
-  CHECK_GE(token.id, 0);
-  return GgufMatrixRow2VectorView("token_embd.weight", token.id);
+MatrixView Model::GetTokenEmbeddings() const {
+  return GgufMatrix2MatrixView("token_embd.weight");
+}
+
+int Model::GetTokenEmbeddingLength() const {
+  return CheckedCast<int>(
+      parser_->GetMetadata<uint32_t>("llama.embedding_length"));
 }
 
 Token Model::GetBosToken() const {
@@ -66,14 +69,14 @@ int Model::GetVocabSize() const {
   return CheckedCast<int>(parser_->GetMetadata<uint32_t>("llama.vocab_size"));
 }
 
-VectorView Model::GgufMatrixRow2VectorView(std::string_view key,
-                                           int row) const {
+MatrixView Model::GgufMatrix2MatrixView(std::string_view key) const {
   const GgufParser::TensorInfo& info = parser_->GetTensorInfo(key);
   const std::byte* data = parser_->GetTensorData(info);
-  CHECK_LT(row, info.dimensions[1]);
 
   DType dtype = GgmlType2DType(info.type);
-  return VectorView::Create(dtype, data + info.dimensions[0] * row,
-                            CheckedCast<int>(info.dimensions[0]));
+  CHECK_EQ(info.dimensions.size(), 2);
+  return MatrixView::Create(dtype, data,
+                            CheckedCast<int64_t>(info.dimensions[1]),
+                            CheckedCast<int64_t>(info.dimensions[0]));
 }
 }  // namespace tlm

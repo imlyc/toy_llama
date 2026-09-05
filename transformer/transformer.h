@@ -29,6 +29,9 @@ class Transformer {
 
   MatrixView token_embeddings_;
 
+  std::unique_ptr<Storage> embedding_storage_;
+  MutableVectorView embedding_;
+
   std::vector<DecoderBlock> decoder_blocks_;
   RmsNormLayer final_rms_norm_;
 
