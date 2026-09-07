@@ -6,11 +6,10 @@
 namespace tlm {
 
 RmsNormLayer::RmsNormLayer(ComputeEngine& compute,
-                           VectorView gamma,
-                           float epsilon)
+                           const Param& param)
     : compute_(compute),
-      gamma_(gamma),
-      epsilon_(epsilon) {
+      gamma_(param.gamma),
+      epsilon_(param.epsilon) {
   output_storage_ = compute_.Alloc(gamma_.shape[0]);
   output_ = output_storage_->AsVector(gamma_.shape[0]);
 }

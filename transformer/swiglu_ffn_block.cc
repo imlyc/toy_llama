@@ -5,7 +5,11 @@
 
 namespace tlm {
 
-SwiGluFfnBlock::SwiGluFfnBlock(ComputeEngine& compute) : compute_(compute) {
+SwiGluFfnBlock::SwiGluFfnBlock(ComputeEngine& compute, const Param& param)
+    : compute_(compute),
+      wup_(param.wup),
+      wgate_(param.wgate),
+      wdown_(param.wdown) {
   up_storage_ = compute_.Alloc(wup_.shape[0]);
   up_ = up_storage_->AsVector(wup_.shape[0]);
   gate_storage_ = compute_.Alloc(wgate_.shape[0]);

@@ -10,7 +10,22 @@ class ComputeEngine;
 
 class GroupQueryAttnBlock {
  public:
-  explicit GroupQueryAttnBlock(ComputeEngine& compute);
+  struct Param {
+    int key_size = 64;
+    int value_size = 64;
+    int context_length = 131072;
+    int head_count = 32;
+    int head_count_kv = 8;
+    float rope_freq_base = 500000;
+    int rope_dimension_count = 64;
+    MatrixView wq;
+    MatrixView wk;
+    MatrixView wv;
+    MatrixView wo;
+    VectorView rope_freqs;
+  };
+
+  GroupQueryAttnBlock(ComputeEngine& compute, const Param& param);
   ~GroupQueryAttnBlock();
 
   GroupQueryAttnBlock(GroupQueryAttnBlock&&);
@@ -20,15 +35,10 @@ class GroupQueryAttnBlock {
  private:
   ComputeEngine& compute_;
 
-  // TODO: Use parameters from model.
-  const int64_t key_size_ = 64;
-  const int64_t value_size_ = 64;
-  const int64_t context_length_ = 131072;
-  const int64_t head_count_ = 32;
-  const int64_t head_count_kv_ = 8;
-  const int64_t output_size_ = 2048;
-  const float rope_freq_base_ = 500000;
-  const int rope_dimension_count_ = 64;
+  const int head_count_;
+  const int head_count_kv_;
+  const float rope_freq_base_;
+  const int rope_dimension_count_;
 
   int64_t token_index_ = 0;
 

@@ -6,20 +6,53 @@
 #include "model/model.h"
 
 namespace tlm {
+namespace {
+DecoderBlock::Param GetDecoderBlockParam(const Model& model, int index) {
+  float epsilon = model.GetLayerNormEpsilon();
+
+  DecoderBlock::Param param;
+
+  param.embedding_size = model.GetEmbeddingLength();
+
+  param.attn_norm = {model.GetDecoderBlockAttnNormWeight(index), epsilon};
+
+  param.gqa.key_size = model.GetAttnKeyLength();
+  param.gqa.value_size = model.GetAttnValueLength();
+  param.gqa.context_length = model.GetContextLength();
+  param.gqa.head_count = model.GetAttnHeadCount();
+  param.gqa.head_count_kv = model.GetAttnHeadCountKv();
+  param.gqa.rope_freq_base = model.GetRopeFreqBase();
+  param.gqa.rope_dimension_count = model.GetRopeDimensionCount();
+  param.gqa.wq = model.GetDecoderBlockAttnQWeight(index);
+  param.gqa.wk = model.GetDecoderBlockAttnKWeight(index);
+  param.gqa.wv = model.GetDecoderBlockAttnVWeight(index);
+  param.gqa.wo = model.GetDecoderBlockAttnOWeight(index);
+  param.gqa.rope_freqs = model.GetRopeFreqsWeight();
+
+  param.ffn_norm = {model.GetDecoderBlockFfnNormWeight(index), epsilon};
+
+  param.swiglu_ffn.wup = model.GetDecoderBlockFfnUpWeight(index);
+  param.swiglu_ffn.wgate = model.GetDecoderBlockFfnGateWeight(index);
+  param.swiglu_ffn.wdown = model.GetDecoderBlockFfnDownWeight(index);
+
+  return param;
+}
+}  // namespace
 
 Transformer::Transformer(const Model& model)
     : model_(model),
       token_embeddings_(model_.GetTokenEmbeddings()),
-      final_rms_norm_(compute_engine_,
-                      model_.GetOutputNormGamma(),
-                      model_.GetLayerNormEpsilon()) {
+      final_rms_norm_(
+          compute_engine_,
+          {model_.GetOutputNormGamma(), model_.GetLayerNormEpsilon()}) {
   const int embedding_length = model_.GetTokenEmbeddingLength();
   embedding_storage_ = compute_engine_.Alloc(embedding_length);
   embedding_ = embedding_storage_->AsVector(embedding_length);
 
   const int decoder_block_count = model_.GetDecoderBlockCount();
   for (int i = 0; i < decoder_block_count; i++) {
-    decoder_blocks_.emplace_back(compute_engine_);
+    decoder_blocks_.emplace_back(compute_engine_,
+                                 GetDecoderBlockParam(model_, i));
   }
 
   const int64_t vocab_size = model_.GetVocabSize();

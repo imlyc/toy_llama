@@ -8,7 +8,12 @@ class Storage;
 
 class RmsNormLayer {
  public:
-  RmsNormLayer(ComputeEngine& compute, VectorView gamma, float epsilon);
+  struct Param {
+    VectorView gamma;
+    float epsilon = 0;
+  };
+
+  RmsNormLayer(ComputeEngine& compute, const Param& param);
   ~RmsNormLayer();
 
   RmsNormLayer(RmsNormLayer&&);

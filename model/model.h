@@ -25,10 +25,33 @@ class Model {
   Token GetEosToken() const;
 
   int GetDecoderBlockCount() const;
+  int GetContextLength() const;
+  int GetEmbeddingLength() const;
   int GetVocabSize() const;
 
   VectorView GetOutputNormGamma() const;
   float GetLayerNormEpsilon() const;
+
+  int GetAttnKeyLength() const;
+  int GetAttnValueLength() const;
+  int GetAttnHeadCount() const;
+  int GetAttnHeadCountKv() const;
+
+  float GetRopeFreqBase() const;
+  int GetRopeDimensionCount() const;
+  VectorView GetRopeFreqsWeight() const;
+
+  MatrixView GetDecoderBlockAttnQWeight(int index) const;
+  MatrixView GetDecoderBlockAttnKWeight(int index) const;
+  MatrixView GetDecoderBlockAttnVWeight(int index) const;
+  MatrixView GetDecoderBlockAttnOWeight(int index) const;
+
+  MatrixView GetDecoderBlockFfnUpWeight(int index) const;
+  MatrixView GetDecoderBlockFfnGateWeight(int index) const;
+  MatrixView GetDecoderBlockFfnDownWeight(int index) const;
+
+  VectorView GetDecoderBlockAttnNormWeight(int index) const;
+  VectorView GetDecoderBlockFfnNormWeight(int index) const;
 
  private:
   MatrixView GgufMatrix2MatrixView(std::string_view key) const;

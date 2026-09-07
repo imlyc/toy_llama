@@ -8,7 +8,13 @@ class Storage;
 
 class SwiGluFfnBlock {
  public:
-  explicit SwiGluFfnBlock(ComputeEngine& compute);
+  struct Param {
+    MatrixView wup;
+    MatrixView wgate;
+    MatrixView wdown;
+  };
+
+  SwiGluFfnBlock(ComputeEngine& compute, const Param& param);
   ~SwiGluFfnBlock();
 
   SwiGluFfnBlock(SwiGluFfnBlock&&);

@@ -4,22 +4,32 @@
 
 namespace tlm {
 
-GroupQueryAttnBlock::GroupQueryAttnBlock(ComputeEngine& compute)
-    : compute_(compute) {
-  query_storage_ = compute_.Alloc(key_size_ * head_count_);
-  query_ = query_storage_->AsVector(key_size_ * head_count_);
+GroupQueryAttnBlock::GroupQueryAttnBlock(ComputeEngine& compute,
+                                         const Param& param)
+    : compute_(compute),
+      head_count_(param.head_count),
+      head_count_kv_(param.head_count_kv),
+      rope_freq_base_(param.rope_freq_base),
+      rope_dimension_count_(param.rope_dimension_count),
+      wq_(param.wq),
+      wk_(param.wk),
+      wv_(param.wv),
+      wo_(param.wo),
+      rope_freqs_(param.rope_freqs) {
+  query_storage_ = compute_.Alloc(param.key_size * head_count_);
+  query_ = query_storage_->AsVector(param.key_size * head_count_);
   k_cache_storage_ =
-      compute_.Alloc(context_length_ * key_size_ * head_count_kv_);
-  k_cache_ =
-      k_cache_storage_->AsMatrix(context_length_, key_size_ * head_count_kv_);
+      compute_.Alloc(param.context_length * param.key_size * head_count_kv_);
+  k_cache_ = k_cache_storage_->AsMatrix(param.context_length,
+                                        param.key_size * head_count_kv_);
   v_cache_storage_ =
-      compute_.Alloc(context_length_ * value_size_ * head_count_kv_);
-  v_cache_ =
-      v_cache_storage_->AsMatrix(context_length_, value_size_ * head_count_kv_);
-  attn_storage_ = compute_.Alloc(value_size_ * head_count_);
-  attn_ = attn_storage_->AsVector(value_size_ * head_count_);
-  output_storage_ = compute_.Alloc(output_size_);
-  output_ = output_storage_->AsVector(output_size_);
+      compute_.Alloc(param.context_length * param.value_size * head_count_kv_);
+  v_cache_ = v_cache_storage_->AsMatrix(param.context_length,
+                                        param.value_size * head_count_kv_);
+  attn_storage_ = compute_.Alloc(param.value_size * head_count_);
+  attn_ = attn_storage_->AsVector(param.value_size * head_count_);
+  output_storage_ = compute_.Alloc(wo_.shape[0]);
+  output_ = output_storage_->AsVector(wo_.shape[0]);
 }
 GroupQueryAttnBlock::~GroupQueryAttnBlock() = default;
 
