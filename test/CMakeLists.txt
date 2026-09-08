@@ -5,6 +5,7 @@ add_executable(toy_llama_test
   gguf_parser_test.cc
   tensor_view_test.cc
   compute_engine_test.cc
+  transformer_test.cc
 )
 
 target_include_directories(toy_llama_test PRIVATE ${CMAKE_SOURCE_DIR})
@@ -16,6 +17,7 @@ target_link_libraries(toy_llama_test PRIVATE
   model
   tensor
   tokenizer
+  transformer
   glog::glog
   GTest::gtest_main
 )
