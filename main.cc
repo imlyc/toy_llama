@@ -33,8 +33,9 @@ int main(int argc, char** argv) {
     message = "Hello, how are you?";
   }
 
+  LOG(INFO) << "message: " << message;
   std::string reply = chat_engine.SendMessage(message);
-  LOG(INFO) << ">>>>\n" << reply << "\n<<<<";
+  LOG(INFO) << "reply: " << reply;
 
   return 0;
 }

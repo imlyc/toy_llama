@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <queue>
+#include <sstream>
 #include <string_view>
 #include <vector>
 
@@ -14,6 +15,7 @@
 namespace tlm {
 namespace {
 constexpr int kInvalidRank = std::numeric_limits<int>::max();
+constexpr char kUnknownToken[] = "<|unknown|>";
 
 const RE2 kWordSplitter(
     "("
@@ -106,6 +108,16 @@ std::array<std::string, 256> BuildByteToUtf8Map() {
   return m;
 }
 
+std::unordered_map<std::string, int> BuildUtf8ToByteMap(
+    const std::array<std::string, 256>& byte_to_utf8) {
+  std::unordered_map<std::string, int> utf8_to_byte;
+  for (int i = 0; i < byte_to_utf8.size(); i++) {
+    const std::string& utf8 = byte_to_utf8[i];
+    utf8_to_byte[utf8] = i;
+  }
+  return utf8_to_byte;
+}
+
 std::unordered_map<std::string_view, int> BuildMergeToRankMap(
     const std::vector<std::string_view>& merges) {
   std::unordered_map<std::string_view, int> merge_to_rank;
@@ -156,7 +168,9 @@ Tokenizer::Tokenizer(const Model& model)
 
 Tokenizer::Tokenizer(const std::vector<std::string_view>& tokens,
                      const std::vector<std::string_view>& merges)
-  : byte_to_utf8_(BuildByteToUtf8Map()),
+  : token_to_symbol_(tokens),
+    byte_to_utf8_(BuildByteToUtf8Map()),
+    utf8_to_byte_(BuildUtf8ToByteMap(byte_to_utf8_)),
     merge_to_rank_(BuildMergeToRankMap(merges)),
     symbol_to_token_(BuildSymbolToTokenMap(tokens)) {
 }
@@ -180,7 +194,30 @@ std::vector<Token> Tokenizer::TextToToken(const std::string& text) {
 }
 
 std::string Tokenizer::TokenToText(const std::vector<Token>& tokens) {
-  return "";
+  std::string text;
+  for (const auto& token : tokens) {
+    if (token.id < 0 || token.id >= token_to_symbol_.size()) {
+      text.append(kUnknownToken);
+      continue;
+    }
+
+    std::string_view symbol = token_to_symbol_[token.id];
+    int c = 0;
+    while (c < symbol.size()) {
+      int utf8_len = Utf8CharLength(symbol[c]);
+      // unordered_map<std::string, int>::find(std::string_view) can't compile.
+      // Has to use std::string here.
+      std::string utf8(symbol.substr(c, utf8_len));
+      auto it = utf8_to_byte_.find(utf8);
+      if (it != utf8_to_byte_.end()) {
+        text.push_back(static_cast<char>(it->second));
+      } else {
+        text.append(kUnknownToken);
+      }
+      c += utf8_len;
+    }
+  }
+  return text;
 }
 
 std::string Tokenizer::MapByteToUtf8(char c) {
@@ -269,7 +306,6 @@ void Tokenizer::BpeEncode(std::vector<Token>& output, const std::string& str) {
     CHECK(!current.deleted);
     output.emplace_back(GetToken(current.text));
     symbol_index = current.next;
-    LOG(ERROR) << "text " << current.text;
   }
 }
 

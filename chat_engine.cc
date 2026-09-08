@@ -18,6 +18,8 @@ std::string ChatEngine::SendMessage(const std::string& message) {
   while (next_token != model_.GetEosToken() && next_token != Token::INVALID) {
     output_tokens.push_back(next_token);
 
+    LOG(INFO) << "[DEBUG] tokens: " << tokenizer_.TokenToText(output_tokens);
+
     logits = transformer_.Predict(next_token);
     next_token = sampler_.Pick(logits);
   }

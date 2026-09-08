@@ -33,7 +33,10 @@ class Tokenizer {
   // BPE
   void BpeEncode(std::vector<Token>& output, const std::string& str);
 
+  std::vector<std::string_view> token_to_symbol_;
+
   std::array<std::string, 256> byte_to_utf8_;
+  std::unordered_map<std::string, int> utf8_to_byte_;
   std::unordered_map<std::string_view, int> merge_to_rank_;
   std::unordered_map<std::string_view, Token> symbol_to_token_;
 };
