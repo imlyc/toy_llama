@@ -121,5 +121,54 @@ TEST_F(TokenizerTest, ContractionsPreTokenizationSplit) {
             (std::vector<Token>{{0}, {1}, {2}, {3}, {4}}));
 }
 
+// ── TokenToText ───────────────────────────────────────────────────────────────
+// Vocab symbols use the byte-level BPE alphabet: space is stored as Ġ (U+0120,
+// UTF-8 C4 A0), newline as Ċ (U+010A, UTF-8 C4 8A). Printable ASCII maps to
+// itself.
+
+TEST_F(TokenizerTest, TokenToTextPlainAscii) {
+  Init({"hello", ",", "\xC4\xA0world"}, {});   // "hello", ",", "Ġworld"
+  EXPECT_EQ(tokenizer_->TokenToText({{0}, {1}, {2}}), "hello, world");
+}
+
+TEST_F(TokenizerTest, TokenToTextSpaceAndNewline) {
+  Init({"\xC4\xA0hi", "\xC4\x8A"}, {});        // "Ġhi", "Ċ"
+  EXPECT_EQ(tokenizer_->TokenToText({{0}, {1}}), " hi\n");
+}
+
+// Special-token strings are plain printable ASCII and pass through verbatim.
+TEST_F(TokenizerTest, TokenToTextSpecialTokenString) {
+  Init({"<|eot_id|>"}, {});
+  EXPECT_EQ(tokenizer_->TokenToText({{0}}), "<|eot_id|>");
+}
+
+// A multi-byte character split across two tokens must reassemble: the bytes of
+// 🙂 (U+1F642, UTF-8 F0 9F 99 82) map to codepoints {U+00F0, U+0141} and
+// {U+013B, U+0124}, i.e. the two vocab symbols below. Decoding must
+// concatenate raw bytes across tokens, not decode each token as text.
+TEST_F(TokenizerTest, TokenToTextMultibyteSplitAcrossTokens) {
+  Init({"\xC3\xB0\xC5\x81", "\xC4\xBB\xC4\xA4"}, {});
+  EXPECT_EQ(tokenizer_->TokenToText({{0}, {1}}), "\xF0\x9F\x99\x82");  // 🙂
+}
+
+TEST_F(TokenizerTest, TokenToTextInvalidIdGivesUnknown) {
+  Init({"a"}, {});
+  EXPECT_EQ(tokenizer_->TokenToText({{5}}), "<|unknown|>");
+  EXPECT_EQ(tokenizer_->TokenToText({{-1}}), "<|unknown|>");
+}
+
+TEST_F(TokenizerTest, TokenToTextEmpty) {
+  Init({"a"}, {});
+  EXPECT_EQ(tokenizer_->TokenToText({}), "");
+}
+
+// Encode then decode restores the original text, spaces and all.
+TEST_F(TokenizerTest, RoundTripAsciiWithSpaces) {
+  Init({"h", "i", "\xC4\xA0", "\xC4\xA0h", "\xC4\xA0hi"},
+       {"\xC4\xA0 h", "\xC4\xA0h i"});   // merges: "Ġ h" then "Ġh i"
+  const std::string text = "hi hi";
+  EXPECT_EQ(tokenizer_->TokenToText(tokenizer_->TextToToken(text)), text);
+}
+
 }  // namespace
 }  // namespace tlm
