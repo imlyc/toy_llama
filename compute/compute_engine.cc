@@ -73,11 +73,14 @@ void MatMulQ8_0(MutableVectorView out, MatrixView lhs, VectorView rhs) {
   for (int64_t row = 0; row < lhs.shape[0]; row++) {
     float acc = 0;
     for (int64_t block = 0; block < block_count_per_row; block++) {
+      // Block by block dot product, instead of element by element product. This
+      // significantly improves the speed.
       const BlockQ8_0& block_data = lhs_data[row * block_count_per_row + block];
-      for (int64_t index = 0; index < sizeof(BlockQ8_0::data); index++) {
-        int64_t col = block * sizeof(BlockQ8_0::data) + index;
-        acc += block_data.data[index] * block_data.scale * rhs_data[col];
-      }
+      Map<const Eigen::Vector<int8_t, sizeof(BlockQ8_0::data)>> row_data(
+          block_data.data);
+      Map<const Eigen::Vector<float, sizeof(BlockQ8_0::data)>> col_data(
+          rhs_data.data() + sizeof(BlockQ8_0::data) * block);
+      acc += block_data.scale * row_data.cast<float>().dot(col_data);
     }
     out_data[row] = acc;
   }
