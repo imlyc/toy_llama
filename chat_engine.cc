@@ -14,6 +14,9 @@ ChatEngine::~ChatEngine() = default;
 void ChatEngine::SendMessageHelper(const std::string& message,
                                    TokenCb cb) {
   std::vector<Token> message_tokens = tokenizer_.TextToToken(message);
+
+  // Insert BOS on first message. Also insert EOS on other messages to make sure
+  // the EOS token goes into KV cache for multi turn chat.
   std::vector<Token> input_tokens = chat_template_.Apply(
       message_tokens,
       first_message_received_ ? model_.GetEosToken() : model_.GetBosToken());

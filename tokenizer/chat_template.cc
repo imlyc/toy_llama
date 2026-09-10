@@ -41,6 +41,7 @@ std::vector<Token> ChatTemplate::Apply(const std::vector<Token>& message,
   Append(prompt, end_header_id_);
   Append(prompt, newline_);
   Append(prompt, message);
+  Append(prompt, eot_id_);
   Append(prompt, start_header_id_);
   Append(prompt, assistant_);
   Append(prompt, end_header_id_);
