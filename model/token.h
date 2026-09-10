@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <iostream>
 
 namespace tlm {
 
@@ -14,5 +15,7 @@ struct Token {
 };
 
 inline const Token Token::INVALID = {-1};
+
+std::ostream& operator<<(std::ostream& oss, Token token);
 
 }  // namespace tlm

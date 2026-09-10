@@ -5,26 +5,44 @@
 namespace tlm {
 
 ChatEngine::ChatEngine(const Model& model)
-    : model_(model), tokenizer_(model), transformer_(model) {}
+    : model_(model),
+      tokenizer_(model),
+      chat_template_(tokenizer_),
+      transformer_(model) {}
 ChatEngine::~ChatEngine() = default;
 
-std::string ChatEngine::SendMessage(const std::string& message) {
-  std::vector<Token> input_tokens = tokenizer_.TextToToken(message);
-  std::vector<Token> output_tokens;
+void ChatEngine::SendMessageHelper(const std::string& message,
+                                   TokenCb cb) {
+  std::vector<Token> message_tokens = tokenizer_.TextToToken(message);
+  std::vector<Token> input_tokens = chat_template_.Apply(
+      message_tokens,
+      first_message_received_ ? model_.GetEosToken() : model_.GetBosToken());
+  first_message_received_ = true;
 
   std::span<const float> logits = transformer_.Prefill(input_tokens);
 
   Token next_token = sampler_.Pick(logits);
   while (next_token != model_.GetEosToken() && next_token != Token::INVALID) {
-    output_tokens.push_back(next_token);
-
-    LOG(INFO) << "[DEBUG] tokens: " << tokenizer_.TokenToText(output_tokens);
-
+    cb(next_token);
     logits = transformer_.Predict(next_token);
     next_token = sampler_.Pick(logits);
   }
+}
 
-  return tokenizer_.TokenToText(output_tokens);
+void ChatEngine::SendMessageAsync(const std::string& message,
+                                  SendMessageCb cb) {
+  SendMessageHelper(message, [this, cb](Token token) {
+    cb(tokenizer_.TokenToText({token}));
+  });
+}
+
+std::string ChatEngine::SendMessage(const std::string& message) {
+  std::vector<Token> output;
+  SendMessageHelper(message, [&output](Token token) {
+    output.push_back(token);
+  });
+
+  return tokenizer_.TokenToText(output);
 }
 
 }  // namespace tlm

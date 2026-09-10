@@ -169,6 +169,10 @@ VectorView Model::GetDecoderBlockFfnNormWeight(int index) const {
       DecoderBlockTensorName(index, "ffn_norm.weight"));
 }
 
+std::string_view Model::GetChatTemplate() const {
+  return parser_->GetMetadata<std::string_view>("tokenizer.chat_template");
+}
+
 MatrixView Model::GgufMatrix2MatrixView(std::string_view key) const {
   const GgufParser::TensorInfo& info = parser_->GetTensorInfo(key);
   const std::byte* data = parser_->GetTensorData(info);

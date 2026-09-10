@@ -1,4 +1,5 @@
 add_library(tokenizer OBJECT
+  chat_template.cc
   tokenizer.cc
 )
 

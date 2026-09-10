@@ -22,13 +22,13 @@ class Tokenizer {
   std::vector<Token> TextToToken(const std::string& text);
   std::string TokenToText(const std::vector<Token>& tokens);
 
+  Token GetToken(std::string_view text);
+
  private:
   std::string MapByteToUtf8(char c);
 
   // Get rank of merge if exists. Otherwise return kInvalidRank.
   int GetRank(std::string_view current, std::string_view next);
-
-  Token GetToken(std::string_view text);
 
   // BPE
   void BpeEncode(std::vector<Token>& output, const std::string& str);

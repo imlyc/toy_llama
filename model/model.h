@@ -53,6 +53,8 @@ class Model {
   VectorView GetDecoderBlockAttnNormWeight(int index) const;
   VectorView GetDecoderBlockFfnNormWeight(int index) const;
 
+  std::string_view GetChatTemplate() const;
+
  private:
   MatrixView GgufMatrix2MatrixView(std::string_view key) const;
   VectorView GgufVector2VectorView(std::string_view key) const;

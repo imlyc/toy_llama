@@ -1,3 +1,6 @@
+#include <iostream>
+#include <string>
+
 #include <glog/logging.h>
 
 #include "chat_engine.h"
@@ -10,7 +13,7 @@ constexpr char kModelPath[] =
 }  // namespace
 
 int main(int argc, char** argv) {
-  FLAGS_logtostderr = 1;
+  // FLAGS_logtostderr = 1;
   FLAGS_minloglevel = 0;
   google::InitGoogleLogging(argv[0]);
 
@@ -26,16 +29,39 @@ int main(int argc, char** argv) {
 
   tlm::ChatEngine chat_engine(*model);
 
-  std::string message;
-  if (argc == 2) {
-    message = std::string(argv[1]);
-  } else {
-    message = "Hello, how are you?";
+  if (argc > 2) {
+    std::cout << "Unsupported usage." << std::endl;
+    return -1;
   }
 
-  LOG(INFO) << "message: " << message;
-  std::string reply = chat_engine.SendMessage(message);
-  LOG(INFO) << "reply: " << reply;
+  if (argc == 2) {
+    std::string message(argv[1]);
+    std::cout << "message: " << message << std::endl;
+    std::string reply = chat_engine.SendMessage(message);
+    std::cout << "reply: " << reply << std::endl;
+    return 0;
+  }
 
+  while (true) {
+    std::cout << "user: " << std::flush;
+
+    std::string input;
+    if (!std::getline(std::cin, input)) {
+      break;
+    }
+
+    if (input.empty()) {
+      continue;
+    }
+
+    std::cout << "assistant: " << std::flush;
+    chat_engine.SendMessageAsync(input, [](const std::string& text) {
+      std::cout << text << std::flush;
+    });
+    std::cout << std::endl;
+  }
+
+  std::cout << std::endl;
+  std::cout << "assistant: Good bye!" << std::endl;
   return 0;
 }

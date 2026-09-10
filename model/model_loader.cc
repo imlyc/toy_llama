@@ -25,6 +25,7 @@ std::unique_ptr<Model> ModelLoader::Load(const std::string& model_path) {
   }
 
   auto model = std::make_unique<Model>(std::move(model_file), std::move(parser));
+  LOG(INFO) << "chat template " << model->GetChatTemplate();
   return model;
 }
 
