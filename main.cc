@@ -1,5 +1,7 @@
+#include <filesystem>
 #include <iostream>
 #include <string>
+
 
 #include <glog/logging.h>
 
@@ -9,11 +11,14 @@
 
 namespace {
 constexpr char kModelPath[] =
-    "/Users/imlyc/Work/toy_llama/data/models/Llama-3.2-1B-Instruct-Q8_0.gguf";
+    "/Users/imlyc/Work/toy_llama/data/models/llama-3.2-1b-instruct-q8_0.gguf";
 }  // namespace
 
 int main(int argc, char** argv) {
-  // FLAGS_logtostderr = 1;
+  std::filesystem::path log_dir = "/tmp/toy_llama";
+  std::filesystem::create_directory(log_dir);
+
+  FLAGS_log_dir = log_dir;
   FLAGS_minloglevel = 0;
   google::InitGoogleLogging(argv[0]);
 
