@@ -30,6 +30,35 @@ MatrixView AsMat(const std::vector<float>& v, int64_t rows, int64_t cols) {
                             cols);
 }
 
+MutableMatrixView AsMutableMat(std::vector<float>& v, int64_t rows,
+                               int64_t cols) {
+  return MutableMatrixView::Create(DType::F32,
+                                   reinterpret_cast<std::byte*>(v.data()),
+                                   rows, cols);
+}
+
+// Single-row [1, n] matrix views: the T = 1 (decode) case of every matrix
+// kernel. Lets the original vector-level cases run unchanged as regressions.
+MatrixView AsRow(const std::vector<float>& v) {
+  return AsMat(v, 1, static_cast<int64_t>(v.size()));
+}
+
+MutableMatrixView AsMutableRow(std::vector<float>& v) {
+  return AsMutableMat(v, 1, static_cast<int64_t>(v.size()));
+}
+
+MatrixView AsQ8Mat(const std::vector<BlockQ8_0>& blocks, int64_t rows,
+                   int64_t cols) {
+  return MatrixView::Create(DType::Q8_0,
+                            reinterpret_cast<const std::byte*>(blocks.data()),
+                            rows, cols);
+}
+
+// ── Attn ──────────────────────────────────────────────────────────────────────
+// q is [T, head_count_q * head_dim]; k, v are [L, head_count_kv * head_dim]
+// with L >= T. The last T rows of k/v correspond to the T query rows, so
+// query row t may attend to keys [0, L - T + t] only (causal mask).
+
 // One token, one head: softmax over a single score is 1, so the output must be
 // exactly the (only) V row, independent of q and k.
 TEST(ComputeEngineAttnTest, SingleTokenCopiesV) {
@@ -39,7 +68,7 @@ TEST(ComputeEngineAttnTest, SingleTokenCopiesV) {
   std::vector<float> v = {7.f, 9.f};
   std::vector<float> out(2, -1.f);
 
-  engine.Attn(AsMutableVec(out), AsVec(q), AsMat(k, 1, 2), AsMat(v, 1, 2),
+  engine.Attn(AsMutableRow(out), AsRow(q), AsMat(k, 1, 2), AsMat(v, 1, 2),
               /*head_count_q=*/1, /*head_count_kv=*/1);
 
   EXPECT_NEAR(out[0], 7.f, 1e-5);
@@ -64,7 +93,7 @@ TEST(ComputeEngineAttnTest, EqualScoresAverageV) {
   };
   std::vector<float> out(2, -1.f);
 
-  engine.Attn(AsMutableVec(out), AsVec(q), AsMat(k, 3, 2), AsMat(v, 3, 2),
+  engine.Attn(AsMutableRow(out), AsRow(q), AsMat(k, 3, 2), AsMat(v, 3, 2),
               /*head_count_q=*/1, /*head_count_kv=*/1);
 
   EXPECT_NEAR(out[0], 3.f, 1e-4);  // (3 + 6 + 0) / 3
@@ -103,7 +132,7 @@ TEST(ComputeEngineAttnTest, GroupedHeadsHandComputed) {
   };
   std::vector<float> out(8, -1.f);
 
-  engine.Attn(AsMutableVec(out), AsVec(q), AsMat(k, 2, 4), AsMat(v, 2, 4),
+  engine.Attn(AsMutableRow(out), AsRow(q), AsMat(k, 2, 4), AsMat(v, 2, 4),
               /*head_count_q=*/4, /*head_count_kv=*/2);
 
   const std::vector<float> expected = {
@@ -139,13 +168,113 @@ TEST(ComputeEngineAttnTest, TopSliceIgnoresRowsBeyondLength) {
 
   MatrixView k_top = AsMat(k, 4, 2).Top(2);
   MatrixView v_top = AsMat(v, 4, 2).Top(2);
-  engine.Attn(AsMutableVec(out), AsVec(q), k_top, v_top,
+  engine.Attn(AsMutableRow(out), AsRow(q), k_top, v_top,
               /*head_count_q=*/1, /*head_count_kv=*/1);
 
   // Equal keys in the valid prefix -> uniform weights -> mean of first 2 rows.
   EXPECT_NEAR(out[0], 4.f, 1e-4);
   EXPECT_NEAR(out[1], 6.f, 1e-4);
 }
+
+// Two queries over their own two keys (no prior context). Identical keys make
+// every visible subset uniform, so the mask alone decides the output: row 0
+// may see only key 0, row 1 sees both. A missing mask would average both rows
+// into row 0 as well.
+TEST(ComputeEngineAttnTest, CausalMaskHidesFutureKeys) {
+  ComputeEngine engine;
+  std::vector<float> q = {
+      0.5f, -0.5f,  // query 0
+      2.f,  1.f,    // query 1
+  };
+  std::vector<float> k = {
+      1.f, 1.f,  // key 0
+      1.f, 1.f,  // key 1
+  };
+  std::vector<float> v = {
+      2.f, 4.f,  // t = 0
+      6.f, 8.f,  // t = 1
+  };
+  std::vector<float> out(4, -1.f);
+
+  engine.Attn(AsMutableMat(out, 2, 2), AsMat(q, 2, 2), AsMat(k, 2, 2),
+              AsMat(v, 2, 2), /*head_count_q=*/1, /*head_count_kv=*/1);
+
+  EXPECT_NEAR(out[0], 2.f, 1e-4);  // row 0: only v0
+  EXPECT_NEAR(out[1], 4.f, 1e-4);
+  EXPECT_NEAR(out[2], 4.f, 1e-4);  // row 1: mean(v0, v1)
+  EXPECT_NEAR(out[3], 6.f, 1e-4);
+}
+
+// Prefill on top of existing context: L = 4 cached keys, T = 2 new queries.
+// The new queries are the LAST two positions, so row 0 sees keys 0..2 and
+// row 1 sees keys 0..3. Pins the mask offset (L - T) for the non-empty-cache
+// case.
+TEST(ComputeEngineAttnTest, CausalMaskWithPriorContext) {
+  ComputeEngine engine;
+  std::vector<float> q = {
+      1.f, 0.f,  // query at position 2
+      0.f, 1.f,  // query at position 3
+  };
+  std::vector<float> k(8, 1.f);  // 4 identical keys -> uniform over prefix
+  std::vector<float> v = {
+      0.f,  0.f,   // t = 0
+      4.f,  4.f,   // t = 1
+      8.f,  8.f,   // t = 2
+      12.f, 12.f,  // t = 3
+  };
+  std::vector<float> out(4, -1.f);
+
+  engine.Attn(AsMutableMat(out, 2, 2), AsMat(q, 2, 2), AsMat(k, 4, 2),
+              AsMat(v, 4, 2), /*head_count_q=*/1, /*head_count_kv=*/1);
+
+  EXPECT_NEAR(out[0], 4.f, 1e-4);  // row 0: mean(v0, v1, v2)
+  EXPECT_NEAR(out[1], 4.f, 1e-4);
+  EXPECT_NEAR(out[2], 6.f, 1e-4);  // row 1: mean(v0 .. v3)
+  EXPECT_NEAR(out[3], 6.f, 1e-4);
+}
+
+// The prefill contract: a batched call over T queries must equal T serial
+// single-query calls, each attending over Top(t + 1). Uses GQA (2 q heads on
+// 1 kv head) and non-degenerate values so the scores, scale, mask, softmax and
+// per-head slicing all participate.
+TEST(ComputeEngineAttnTest, BatchedMatchesSerial) {
+  ComputeEngine engine;
+  const int64_t T = 3, q_cols = 4, kv_cols = 2;
+  std::vector<float> q = {
+      0.9f,  -0.4f, 0.2f,  1.1f,   // t = 0: head 0 | head 1
+      -1.2f, 0.3f,  0.8f,  -0.7f,  // t = 1
+      0.5f,  0.5f,  -1.5f, 0.1f,   // t = 2
+  };
+  std::vector<float> k = {
+      0.3f, -1.f,   // t = 0
+      1.2f, 0.4f,   // t = 1
+      -0.6f, 0.9f,  // t = 2
+  };
+  std::vector<float> v = {
+      1.f,  2.f,   // t = 0
+      -3.f, 0.5f,  // t = 1
+      4.f,  -1.f,  // t = 2
+  };
+
+  std::vector<float> batched(T * q_cols, -1.f);
+  engine.Attn(AsMutableMat(batched, T, q_cols), AsMat(q, T, q_cols),
+              AsMat(k, T, kv_cols), AsMat(v, T, kv_cols),
+              /*head_count_q=*/2, /*head_count_kv=*/1);
+
+  for (int64_t t = 0; t < T; ++t) {
+    std::vector<float> serial(q_cols, -1.f);
+    engine.Attn(AsMutableRow(serial), AsMat(q, T, q_cols).Slice(t, 1),
+                AsMat(k, T, kv_cols).Top(t + 1),
+                AsMat(v, T, kv_cols).Top(t + 1),
+                /*head_count_q=*/2, /*head_count_kv=*/1);
+    for (int64_t c = 0; c < q_cols; ++c) {
+      EXPECT_NEAR(batched[t * q_cols + c], serial[c], 1e-5)
+          << "t=" << t << " c=" << c;
+    }
+  }
+}
+
+// ── Add ───────────────────────────────────────────────────────────────────────
 
 // Add must OVERWRITE out with lhs + rhs. out is pre-filled with a sentinel to
 // catch implementations that accumulate into existing contents.
@@ -155,7 +284,7 @@ TEST(ComputeEngineAddTest, OverwritesOut) {
   std::vector<float> rhs = {10.f, 20.f, -0.5f, 0.f};
   std::vector<float> out = {99.f, 99.f, 99.f, 99.f};  // stale garbage
 
-  engine.Add(AsMutableVec(out), AsVec(lhs), AsVec(rhs));
+  engine.Add(AsMutableRow(out), AsRow(lhs), AsRow(rhs));
 
   EXPECT_FLOAT_EQ(out[0], 11.f);
   EXPECT_FLOAT_EQ(out[1], 18.f);
@@ -172,8 +301,8 @@ TEST(ComputeEngineAddTest, RepeatedCallsAreIdempotent) {
   std::vector<float> rhs = {3.f, 4.f};
   std::vector<float> out(2, 0.f);
 
-  engine.Add(AsMutableVec(out), AsVec(lhs), AsVec(rhs));
-  engine.Add(AsMutableVec(out), AsVec(lhs), AsVec(rhs));
+  engine.Add(AsMutableRow(out), AsRow(lhs), AsRow(rhs));
+  engine.Add(AsMutableRow(out), AsRow(lhs), AsRow(rhs));
 
   EXPECT_FLOAT_EQ(out[0], 4.f);
   EXPECT_FLOAT_EQ(out[1], 6.f);
@@ -186,23 +315,34 @@ TEST(ComputeEngineAddTest, InPlaceLhsAlias) {
   std::vector<float> lhs = {1.f, 2.f, 3.f};
   std::vector<float> rhs = {10.f, 20.f, 30.f};
 
-  engine.Add(AsMutableVec(lhs), AsVec(lhs), AsVec(rhs));
+  engine.Add(AsMutableRow(lhs), AsRow(lhs), AsRow(rhs));
 
   EXPECT_FLOAT_EQ(lhs[0], 11.f);
   EXPECT_FLOAT_EQ(lhs[1], 22.f);
   EXPECT_FLOAT_EQ(lhs[2], 33.f);
 }
 
+// Multi-row operands: every element is added with its own counterpart; rows
+// must not bleed into each other.
+TEST(ComputeEngineAddTest, MultiRowElementwise) {
+  ComputeEngine engine;
+  std::vector<float> lhs = {1.f, 2.f,
+                            3.f, 4.f};
+  std::vector<float> rhs = {10.f, 20.f,
+                            30.f, 40.f};
+  std::vector<float> out(4, 99.f);
+
+  engine.Add(AsMutableMat(out, 2, 2), AsMat(lhs, 2, 2), AsMat(rhs, 2, 2));
+
+  EXPECT_FLOAT_EQ(out[0], 11.f);
+  EXPECT_FLOAT_EQ(out[1], 22.f);
+  EXPECT_FLOAT_EQ(out[2], 33.f);
+  EXPECT_FLOAT_EQ(out[3], 44.f);
+}
+
 // ── MatMul ────────────────────────────────────────────────────────────────────
 // Convention: out = mat @ vec with mat shaped [out, in], rows contiguous
 // (GGUF weight layout; Q8_0 blocks run along the summed `in` dimension).
-
-MatrixView AsQ8Mat(const std::vector<BlockQ8_0>& blocks, int64_t rows,
-                   int64_t cols) {
-  return MatrixView::Create(DType::Q8_0,
-                            reinterpret_cast<const std::byte*>(blocks.data()),
-                            rows, cols);
-}
 
 TEST(ComputeEngineMatMulTest, F32HandComputed) {
   ComputeEngine engine;
@@ -288,6 +428,144 @@ TEST(ComputeEngineMatMulTest, Q8MatchesF32) {
   }
 }
 
+// ── MatMulT ───────────────────────────────────────────────────────────────────
+// Batched projection: out[T, out_dim] = A[T, in] @ W^T with W = [out_dim, in]
+// in GGUF layout. Row t of out is W @ A[t], i.e. MatMul applied per token.
+
+// A = [T=2, in=3], W = [out=2, in=3]. Each output row is W @ (that input row).
+TEST(ComputeEngineMatMulTTest, F32HandComputed) {
+  ComputeEngine engine;
+  std::vector<float> a = {1.f, 0.5f, -1.f,
+                          2.f, 1.f,  0.f};
+  std::vector<float> w = {1.f, 2.f, 3.f,
+                          4.f, 5.f, 6.f};
+  std::vector<float> out(4, 99.f);
+
+  engine.MatMulT(AsMutableMat(out, 2, 2), AsMat(a, 2, 3), AsMat(w, 2, 3));
+
+  EXPECT_FLOAT_EQ(out[0], -1.f);   // row 0 . w0 = 1 + 1 - 3
+  EXPECT_FLOAT_EQ(out[1], 0.5f);   // row 0 . w1 = 4 + 2.5 - 6
+  EXPECT_FLOAT_EQ(out[2], 4.f);    // row 1 . w0 = 2 + 2 + 0
+  EXPECT_FLOAT_EQ(out[3], 13.f);   // row 1 . w1 = 8 + 5 + 0
+}
+
+// T = 1 is the decode path: MatMulT on a [1, in] input must equal MatMul on
+// the same vector. F32 weights.
+TEST(ComputeEngineMatMulTTest, SingleRowMatchesMatMulF32) {
+  ComputeEngine engine;
+  std::vector<float> w = {1.f, 2.f, 3.f,
+                          4.f, 5.f, 6.f,
+                          -1.f, 0.f, 2.f};
+  std::vector<float> x = {0.5f, -2.f, 1.5f};
+
+  std::vector<float> mm(3, 99.f), mmt(3, -99.f);
+  engine.MatMul(AsMutableVec(mm), AsMat(w, 3, 3), AsVec(x));
+  engine.MatMulT(AsMutableRow(mmt), AsRow(x), AsMat(w, 3, 3));
+
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_FLOAT_EQ(mmt[i], mm[i]) << "i=" << i;
+  }
+}
+
+// Same for Q8_0 weights, with non-unit scales so the scale is exercised. The
+// two kernels accumulate in a different order, hence NEAR not FLOAT_EQ.
+TEST(ComputeEngineMatMulTTest, SingleRowMatchesMatMulQ8) {
+  ComputeEngine engine;
+  const int64_t rows = 3, cols = 64;  // out = 3, in = 64 (2 blocks per row)
+  std::vector<BlockQ8_0> blocks(rows * 2);
+  for (int64_t b = 0; b < rows * 2; ++b) {
+    blocks[b].scale = 0.5f + 0.25f * static_cast<float>(b);
+    for (int i = 0; i < 32; ++i) {
+      blocks[b].data[i] = static_cast<int8_t>((b * 5 + i * 3) % 23 - 11);
+    }
+  }
+  std::vector<float> x(cols);
+  for (int64_t i = 0; i < cols; ++i) x[i] = 0.125f * static_cast<float>(i - 30);
+
+  std::vector<float> mm(rows, 99.f), mmt(rows, -99.f);
+  engine.MatMul(AsMutableVec(mm), AsQ8Mat(blocks, rows, cols), AsVec(x));
+  engine.MatMulT(AsMutableRow(mmt), AsRow(x), AsQ8Mat(blocks, rows, cols));
+
+  for (int64_t r = 0; r < rows; ++r) {
+    EXPECT_NEAR(mmt[r], mm[r], 1e-3) << "row " << r;
+  }
+}
+
+// T = 3 tokens, out_dim = 2, in = 64 (2 blocks per weight row), with every
+// block distinct. The activation columns a block multiplies must be selected
+// by the BLOCK index, not the weight-row index: with out_dim < in, indexing
+// by row would read the wrong (or out-of-range) columns.
+//
+//   W row 0: block 0 = 1s (scale 1), block 1 = 2s (scale 1)
+//   W row 1: block 0 = 1s (scale 2), block 1 = 0s
+//   A row t: first 32 cols = (t+1), last 32 cols = 10(t+1)
+//   out[t][0] = 32(t+1) + 2*32*10(t+1) = 672(t+1)
+//   out[t][1] = 2*32(t+1)              = 64(t+1)
+TEST(ComputeEngineMatMulTTest, Q8MultiRowDistinctBlocks) {
+  ComputeEngine engine;
+  const int64_t T = 3, in = 64, out_dim = 2;
+  std::vector<BlockQ8_0> blocks(4);
+  blocks[0].scale = 1.f;
+  blocks[1].scale = 1.f;
+  blocks[2].scale = 2.f;
+  blocks[3].scale = 1.f;
+  for (int i = 0; i < 32; ++i) {
+    blocks[0].data[i] = 1;
+    blocks[1].data[i] = 2;
+    blocks[2].data[i] = 1;
+    blocks[3].data[i] = 0;
+  }
+  std::vector<float> a(T * in);
+  for (int64_t t = 0; t < T; ++t) {
+    for (int64_t j = 0; j < in; ++j) {
+      a[t * in + j] = (j < 32 ? 1.f : 10.f) * static_cast<float>(t + 1);
+    }
+  }
+  std::vector<float> out(T * out_dim, 99.f);
+
+  engine.MatMulT(AsMutableMat(out, T, out_dim), AsMat(a, T, in),
+                 AsQ8Mat(blocks, out_dim, in));
+
+  for (int64_t t = 0; t < T; ++t) {
+    EXPECT_FLOAT_EQ(out[t * out_dim + 0], 672.f * (t + 1)) << "t=" << t;
+    EXPECT_FLOAT_EQ(out[t * out_dim + 1], 64.f * (t + 1)) << "t=" << t;
+  }
+}
+
+// Q8 and F32 MatMulT on the same logical weights must agree for a multi-row
+// input. Scale = 1 so the only difference is accumulation order.
+TEST(ComputeEngineMatMulTTest, Q8MatchesF32MultiRow) {
+  ComputeEngine engine;
+  const int64_t T = 2, rows = 3, cols = 64;
+  std::vector<BlockQ8_0> blocks(rows * 2);
+  std::vector<float> w_f32(rows * cols);
+  for (int64_t r = 0; r < rows; ++r) {
+    for (int64_t b = 0; b < 2; ++b) {
+      BlockQ8_0& block = blocks[r * 2 + b];
+      block.scale = 1.f;
+      for (int64_t i = 0; i < 32; ++i) {
+        const int8_t q = static_cast<int8_t>((r * 7 + b * 11 + i * 3) % 21 - 10);
+        block.data[i] = q;
+        w_f32[r * cols + b * 32 + i] = static_cast<float>(q);
+      }
+    }
+  }
+  std::vector<float> a(T * cols);
+  for (int64_t i = 0; i < T * cols; ++i) {
+    a[i] = 0.25f * static_cast<float>((i * 5) % 17 - 8);
+  }
+
+  std::vector<float> out_q8(T * rows, 99.f), out_f32(T * rows, -99.f);
+  engine.MatMulT(AsMutableMat(out_q8, T, rows), AsMat(a, T, cols),
+                 AsQ8Mat(blocks, rows, cols));
+  engine.MatMulT(AsMutableMat(out_f32, T, rows), AsMat(a, T, cols),
+                 AsMat(w_f32, rows, cols));
+
+  for (int64_t i = 0; i < T * rows; ++i) {
+    EXPECT_NEAR(out_q8[i], out_f32[i], 1e-3) << "i=" << i;
+  }
+}
+
 // ── Copy ──────────────────────────────────────────────────────────────────────
 // F32 src: plain copy. Q8_0 src: dequantize into the F32 dst.
 
@@ -357,6 +635,8 @@ TEST(ComputeEngineCopyTest, Q8DequantMatchesMatMul) {
 }
 
 // ── RmsNorm ───────────────────────────────────────────────────────────────────
+// Row-wise: each row of the [T, d] input is normalized by its own RMS and
+// scaled by the shared gamma.
 
 constexpr float kRmsEps = 1e-5f;
 
@@ -368,7 +648,7 @@ TEST(ComputeEngineRmsNormTest, HandComputed) {
   std::vector<float> gamma = {1.f, 2.f};
   std::vector<float> out = {99.f, 99.f};  // sentinel: must overwrite
 
-  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), /*epsilon=*/0.f);
+  engine.RmsNorm(AsMutableRow(out), AsRow(x), AsVec(gamma), /*epsilon=*/0.f);
 
   EXPECT_NEAR(out[0], 0.84852814f, 1e-6);
   EXPECT_NEAR(out[1], 2.26274170f, 1e-6);
@@ -382,11 +662,11 @@ TEST(ComputeEngineRmsNormTest, ScaleInvariant) {
   const std::vector<float> gamma = {1.f, 0.5f, 2.f, -1.f};
 
   std::vector<float> base(4), scaled_in(4), scaled_out(4);
-  engine.RmsNorm(AsMutableVec(base), AsVec(x), AsVec(gamma), kRmsEps);
+  engine.RmsNorm(AsMutableRow(base), AsRow(x), AsVec(gamma), kRmsEps);
 
   for (float c : {2.f, 100.f}) {
     for (int i = 0; i < 4; ++i) scaled_in[i] = c * x[i];
-    engine.RmsNorm(AsMutableVec(scaled_out), AsVec(scaled_in), AsVec(gamma),
+    engine.RmsNorm(AsMutableRow(scaled_out), AsRow(scaled_in), AsVec(gamma),
                    kRmsEps);
     for (int i = 0; i < 4; ++i) {
       EXPECT_NEAR(scaled_out[i], base[i], 1e-4) << "c=" << c << " i=" << i;
@@ -402,7 +682,7 @@ TEST(ComputeEngineRmsNormTest, GammaOneGivesUnitRms) {
   std::vector<float> gamma(8, 1.f);
   std::vector<float> out(8, 0.f);
 
-  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), kRmsEps);
+  engine.RmsNorm(AsMutableRow(out), AsRow(x), AsVec(gamma), kRmsEps);
 
   float mean_sq = 0.f;
   for (float v : out) mean_sq += v * v;
@@ -419,7 +699,7 @@ TEST(ComputeEngineRmsNormTest, InputUntouched) {
   std::vector<float> gamma = {1.f, 1.f, 1.f, 1.f};
   std::vector<float> out(4);
 
-  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), kRmsEps);
+  engine.RmsNorm(AsMutableRow(out), AsRow(x), AsVec(gamma), kRmsEps);
 
   for (int i = 0; i < 4; ++i) {
     EXPECT_FLOAT_EQ(x[i], orig[i]) << "i=" << i;
@@ -433,11 +713,57 @@ TEST(ComputeEngineRmsNormTest, ZeroInputNoNan) {
   std::vector<float> gamma(4, 1.f);
   std::vector<float> out(4, 99.f);
 
-  engine.RmsNorm(AsMutableVec(out), AsVec(x), AsVec(gamma), kRmsEps);
+  engine.RmsNorm(AsMutableRow(out), AsRow(x), AsVec(gamma), kRmsEps);
 
   for (int i = 0; i < 4; ++i) {
     EXPECT_TRUE(std::isfinite(out[i])) << "i=" << i;
     EXPECT_FLOAT_EQ(out[i], 0.f) << "i=" << i;
+  }
+}
+
+// Two rows with different content: each is normalized by ITS OWN rms (both
+// rows here have rms = sqrt(12.5)) and multiplied by the same gamma. Catches
+// a loop that normalizes row 0 twice or pools statistics across rows.
+TEST(ComputeEngineRmsNormTest, RowsNormalizedIndependently) {
+  ComputeEngine engine;
+  std::vector<float> x = {3.f, 4.f,
+                          4.f, 3.f};
+  std::vector<float> gamma = {1.f, 2.f};
+  std::vector<float> out(4, 99.f);
+
+  engine.RmsNorm(AsMutableMat(out, 2, 2), AsMat(x, 2, 2), AsVec(gamma),
+                 /*epsilon=*/0.f);
+
+  EXPECT_NEAR(out[0], 0.84852814f, 1e-6);  // 3 / rms
+  EXPECT_NEAR(out[1], 2.26274170f, 1e-6);  // 2 * 4 / rms
+  EXPECT_NEAR(out[2], 1.13137085f, 1e-6);  // 4 / rms
+  EXPECT_NEAR(out[3], 1.69705627f, 1e-6);  // 2 * 3 / rms
+}
+
+// Batched rows must equal the same rows normalized one at a time — the
+// prefill/decode equivalence for this kernel. Rows have different norms so a
+// shared statistic would show.
+TEST(ComputeEngineRmsNormTest, BatchedMatchesSingleRow) {
+  ComputeEngine engine;
+  const int64_t T = 3, d = 4;
+  std::vector<float> x = {
+      0.5f, -1.5f, 2.f,   0.25f,
+      10.f, 20.f,  -5.f,  1.f,
+      -0.1f, 0.2f, 0.3f,  -0.4f,
+  };
+  std::vector<float> gamma = {1.f, 0.5f, 2.f, -1.f};
+
+  std::vector<float> batched(T * d, 99.f);
+  engine.RmsNorm(AsMutableMat(batched, T, d), AsMat(x, T, d), AsVec(gamma),
+                 kRmsEps);
+
+  for (int64_t t = 0; t < T; ++t) {
+    std::vector<float> single(d, -99.f);
+    engine.RmsNorm(AsMutableRow(single), AsMat(x, T, d).Slice(t, 1),
+                   AsVec(gamma), kRmsEps);
+    for (int64_t i = 0; i < d; ++i) {
+      EXPECT_FLOAT_EQ(batched[t * d + i], single[i]) << "t=" << t << " i=" << i;
+    }
   }
 }
 
@@ -450,7 +776,7 @@ TEST(ComputeEngineSwiGluMulTest, PureSiluWithUnitUp) {
   std::vector<float> gate = {0.f, 1.f, -1.f, 2.f};
   std::vector<float> up(4, 1.f);
 
-  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+  engine.SwiGluMul(AsMutableRow(gate), AsRow(up));
 
   EXPECT_NEAR(gate[0], 0.f, 1e-6);
   EXPECT_NEAR(gate[1], 0.7310586f, 1e-6);   // 1 * sigmoid(1)
@@ -465,7 +791,7 @@ TEST(ComputeEngineSwiGluMulTest, SiluAppliesToGateNotUp) {
   std::vector<float> gate = {1.f, 2.f};
   std::vector<float> up = {2.f, 1.f};
 
-  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+  engine.SwiGluMul(AsMutableRow(gate), AsRow(up));
 
   EXPECT_NEAR(gate[0], 1.4621172f, 1e-6);   // silu(1) * 2
   EXPECT_NEAR(gate[1], 1.7615942f, 1e-6);   // silu(2) * 1
@@ -477,7 +803,7 @@ TEST(ComputeEngineSwiGluMulTest, ZeroGateClosesChannel) {
   std::vector<float> gate = {0.f, 0.f};
   std::vector<float> up = {1e6f, -1e6f};
 
-  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+  engine.SwiGluMul(AsMutableRow(gate), AsRow(up));
 
   EXPECT_FLOAT_EQ(gate[0], 0.f);
   EXPECT_FLOAT_EQ(gate[1], 0.f);
@@ -490,7 +816,7 @@ TEST(ComputeEngineSwiGluMulTest, UpUntouched) {
   const std::vector<float> up_orig = {0.5f, 2.f, -1.f};
   std::vector<float> up = up_orig;
 
-  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+  engine.SwiGluMul(AsMutableRow(gate), AsRow(up));
 
   for (int i = 0; i < 3; ++i) {
     EXPECT_FLOAT_EQ(up[i], up_orig[i]) << "i=" << i;
@@ -504,7 +830,7 @@ TEST(ComputeEngineSwiGluMulTest, ExtremeInputsFinite) {
   std::vector<float> gate = {-100.f, 100.f};
   std::vector<float> up = {1.f, 1.f};
 
-  engine.SwiGluMul(AsMutableVec(gate), AsVec(up));
+  engine.SwiGluMul(AsMutableRow(gate), AsRow(up));
 
   EXPECT_TRUE(std::isfinite(gate[0]));
   EXPECT_TRUE(std::isfinite(gate[1]));
@@ -512,7 +838,59 @@ TEST(ComputeEngineSwiGluMulTest, ExtremeInputsFinite) {
   EXPECT_NEAR(gate[1], 100.f, 1e-3);    // silu(100) ≈ 100
 }
 
+// Multi-row: purely elementwise, so every (row, col) pairs gate with its own
+// up entry. Row 1 reuses the values from the single-row tests above.
+TEST(ComputeEngineSwiGluMulTest, MultiRowElementwise) {
+  ComputeEngine engine;
+  std::vector<float> gate = {1.f, 2.f,
+                             0.f, -1.f};
+  std::vector<float> up = {2.f, 1.f,
+                           5.f, 1.f};
+
+  engine.SwiGluMul(AsMutableMat(gate, 2, 2), AsMat(up, 2, 2));
+
+  EXPECT_NEAR(gate[0], 1.4621172f, 1e-6);   // silu(1) * 2
+  EXPECT_NEAR(gate[1], 1.7615942f, 1e-6);   // silu(2) * 1
+  EXPECT_NEAR(gate[2], 0.f, 1e-6);          // silu(0) * 5
+  EXPECT_NEAR(gate[3], -0.2689414f, 1e-6);  // silu(-1) * 1
+}
+
+// ── Softmax ───────────────────────────────────────────────────────────────────
+
+// Probabilities sum to 1, preserve ordering, and e^1 / e^0 = e between
+// adjacent logits.
+TEST(ComputeEngineSoftmaxTest, HandComputed) {
+  ComputeEngine engine;
+  std::vector<float> v = {0.f, 1.f, 0.f};
+
+  engine.Softmax(AsMutableVec(v));
+
+  const float e = std::exp(1.f);
+  EXPECT_NEAR(v[0], 1.f / (2.f + e), 1e-6);
+  EXPECT_NEAR(v[1], e / (2.f + e), 1e-6);
+  EXPECT_NEAR(v[2], 1.f / (2.f + e), 1e-6);
+  EXPECT_NEAR(v[0] + v[1] + v[2], 1.f, 1e-6);
+}
+
+// Shift invariance and overflow safety: adding a constant (even a huge one)
+// to every logit must not change the result — the max-subtraction trick.
+TEST(ComputeEngineSoftmaxTest, ShiftInvariantAndFinite) {
+  ComputeEngine engine;
+  std::vector<float> base = {1.f, 2.f, -1.f};
+  std::vector<float> shifted = {1001.f, 1002.f, 999.f};
+
+  engine.Softmax(AsMutableVec(base));
+  engine.Softmax(AsMutableVec(shifted));
+
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_TRUE(std::isfinite(shifted[i])) << "i=" << i;
+    EXPECT_NEAR(shifted[i], base[i], 1e-6) << "i=" << i;
+  }
+}
+
 // ── Rope ──────────────────────────────────────────────────────────────────────
+// Row-wise with a per-row position: row r of the [T, d] input is rotated at
+// position `position + r`.
 
 constexpr float kFreqBase = 10000.f;
 
@@ -523,7 +901,7 @@ TEST(ComputeEngineRopeTest, PositionZeroIsIdentity) {
   const std::vector<float> orig = v;
   const std::vector<float> unit_freqs = {1.f, 1.f};
 
-  engine.Rope(AsMutableVec(v), /*position=*/0, kFreqBase,
+  engine.Rope(AsMutableRow(v), /*position=*/0, kFreqBase,
               /*dimension_count=*/4, AsVec(unit_freqs));
 
   for (size_t i = 0; i < v.size(); ++i) {
@@ -541,7 +919,7 @@ TEST(ComputeEngineRopeTest, HandComputedSinglePair) {
   std::vector<float> v = {1.f, 0.f};
   const std::vector<float> unit_freqs = {1.f};
 
-  engine.Rope(AsMutableVec(v), m, kFreqBase, /*dimension_count=*/2,
+  engine.Rope(AsMutableRow(v), m, kFreqBase, /*dimension_count=*/2,
               AsVec(unit_freqs));
 
   EXPECT_NEAR(v[0], std::cos(2.0), 1e-6);
@@ -559,7 +937,7 @@ TEST(ComputeEngineRopeTest, PreservesNorm) {
   const std::vector<float> unit_freqs = {1.f, 1.f};
   for (int64_t pos : {1, 17, 4096}) {
     std::vector<float> v = orig;
-    engine.Rope(AsMutableVec(v), pos, kFreqBase, /*dimension_count=*/4,
+    engine.Rope(AsMutableRow(v), pos, kFreqBase, /*dimension_count=*/4,
                 AsVec(unit_freqs));
 
     float got = 0.f;
@@ -583,8 +961,8 @@ TEST(ComputeEngineRopeTest, DotDependsOnRelativePositionOnly) {
   auto roped_dot = [&](int64_t pos_q, int64_t pos_k) {
     std::vector<float> q = q0;
     std::vector<float> k = k0;
-    engine.Rope(AsMutableVec(q), pos_q, kFreqBase, dim, AsVec(freqs));
-    engine.Rope(AsMutableVec(k), pos_k, kFreqBase, dim, AsVec(freqs));
+    engine.Rope(AsMutableRow(q), pos_q, kFreqBase, dim, AsVec(freqs));
+    engine.Rope(AsMutableRow(k), pos_k, kFreqBase, dim, AsVec(freqs));
     float dot = 0.f;
     for (size_t i = 0; i < q.size(); ++i) dot += q[i] * k[i];
     return dot;
@@ -607,7 +985,7 @@ TEST(ComputeEngineRopeTest, PatternRepeatsPerHead) {
   v.insert(v.end(), head.begin(), head.end());  // two identical heads
 
   const std::vector<float> unit_freqs = {1.f, 1.f};
-  engine.Rope(AsMutableVec(v), /*position=*/9, kFreqBase,
+  engine.Rope(AsMutableRow(v), /*position=*/9, kFreqBase,
               /*dimension_count=*/4, AsVec(unit_freqs));
 
   for (int i = 0; i < 4; ++i) {
@@ -623,13 +1001,61 @@ TEST(ComputeEngineRopeTest, FreqFactorsScaleAngles) {
   std::vector<float> v = {1.f, 0.f, 1.f, 0.f};
   const std::vector<float> freqs = {1.f, 2.f};
 
-  engine.Rope(AsMutableVec(v), /*position=*/2, /*freq_base=*/4.f,
+  engine.Rope(AsMutableRow(v), /*position=*/2, /*freq_base=*/4.f,
               /*dimension_count=*/4, AsVec(freqs));
 
   EXPECT_NEAR(v[0], std::cos(2.0), 1e-6);   // pair 0: angle = 2 * 1 / 1
   EXPECT_NEAR(v[1], std::sin(2.0), 1e-6);
   EXPECT_NEAR(v[2], std::cos(0.5), 1e-6);   // pair 1: angle = 2 * 0.5 / 2
   EXPECT_NEAR(v[3], std::sin(0.5), 1e-6);
+}
+
+// Prefill: row r must be rotated at position `start + r`. Three identical rows
+// at start = 5 must equal single-row Rope at positions 5, 6, 7 — and differ
+// from each other, proving the offset is applied rather than a shared
+// position.
+TEST(ComputeEngineRopeTest, RowsUseStartPositionPlusRowIndex) {
+  ComputeEngine engine;
+  const int64_t T = 3, start = 5;
+  const std::vector<float> row = {0.5f, -1.f, 2.f, 0.25f};
+  std::vector<float> batched;
+  for (int64_t t = 0; t < T; ++t) {
+    batched.insert(batched.end(), row.begin(), row.end());
+  }
+  const std::vector<float> freqs = {1.f, 2.f};
+
+  engine.Rope(AsMutableMat(batched, T, 4), start, kFreqBase,
+              /*dimension_count=*/4, AsVec(freqs));
+
+  for (int64_t t = 0; t < T; ++t) {
+    std::vector<float> single = row;
+    engine.Rope(AsMutableRow(single), start + t, kFreqBase,
+                /*dimension_count=*/4, AsVec(freqs));
+    for (int i = 0; i < 4; ++i) {
+      EXPECT_FLOAT_EQ(batched[t * 4 + i], single[i]) << "t=" << t << " i=" << i;
+    }
+  }
+  // Rows at different positions must actually differ.
+  EXPECT_GT(std::abs(batched[0] - batched[4]), 1e-3);
+  EXPECT_GT(std::abs(batched[4] - batched[8]), 1e-3);
+}
+
+// A single row in a [1, d] matrix at position p equals a matrix whose row r
+// is at position p - r... i.e. the position argument is the position of ROW 0,
+// not of the last row. Start = 0 makes row 0 the identity and row 1 rotated.
+TEST(ComputeEngineRopeTest, PositionArgumentIsRowZero) {
+  ComputeEngine engine;
+  std::vector<float> v = {1.f, 0.f,
+                          1.f, 0.f};
+  const std::vector<float> unit_freqs = {1.f};
+
+  engine.Rope(AsMutableMat(v, 2, 2), /*position=*/0, kFreqBase,
+              /*dimension_count=*/2, AsVec(unit_freqs));
+
+  EXPECT_FLOAT_EQ(v[0], 1.f);                 // row 0: position 0, identity
+  EXPECT_FLOAT_EQ(v[1], 0.f);
+  EXPECT_NEAR(v[2], std::cos(1.0), 1e-6);     // row 1: position 1
+  EXPECT_NEAR(v[3], std::sin(1.0), 1e-6);
 }
 
 }  // namespace
