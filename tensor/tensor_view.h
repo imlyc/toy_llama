@@ -12,6 +12,9 @@
 
 namespace tlm {
 
+// TODO: Investigate a proper representation of tensor. We only need vector or
+// matrix, and vector is just 1 x N matrix or N x 1 matrix.
+
 // View class of a tensor. The actual data is owned by a different class, please
 // make sure the storage lives longer than the view.
 //
@@ -78,6 +81,12 @@ struct TensorView {
     requires (Mutable || !RetMutable)
   TensorView<Rank, RetMutable> Top(int64_t len) const {
     return Slice<RetMutable>(0, len);
+  }
+
+  template <bool RetMutable = false>
+    requires (Mutable || !RetMutable)
+  TensorView<Rank, RetMutable> Bottom(int64_t len) const {
+    return Slice<RetMutable>(shape[0] - len, len);
   }
 
   template <bool OtherMutable>

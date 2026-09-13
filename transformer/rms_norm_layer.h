@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor/tensor_view.h"
+#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class ComputeEngine;
@@ -18,15 +19,14 @@ class RmsNormLayer {
 
   RmsNormLayer(RmsNormLayer&&);
 
-  VectorView Forward(VectorView input);
+  MatrixView Forward(MatrixView input);
 
  private:
   ComputeEngine& compute_;
   const VectorView gamma_;
   const float epsilon_;
 
-  std::unique_ptr<Storage> output_storage_;
-  MutableVectorView output_;
+  MatrixStorage output_;
 };
 
 }  // namespace tlm

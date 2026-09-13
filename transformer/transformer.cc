@@ -41,57 +41,56 @@ DecoderBlock::Param GetDecoderBlockParam(const Model& model, int index) {
 
 Transformer::Transformer(const Model& model)
     : model_(model),
+      embedding_size_(model_.GetTokenEmbeddingLength()),
       token_embeddings_(model_.GetTokenEmbeddings()),
+      embeddings_(compute_engine_, embedding_size_),
+      logits_(compute_engine_, model_.GetVocabSize()),
       final_rms_norm_(
           compute_engine_,
           {model_.GetOutputNormGamma(), model_.GetLayerNormEpsilon()}) {
-  const int embedding_length = model_.GetTokenEmbeddingLength();
-  embedding_storage_ = compute_engine_.Alloc(embedding_length);
-  embedding_ = embedding_storage_->AsVector(embedding_length);
-
   const int decoder_block_count = model_.GetDecoderBlockCount();
   for (int i = 0; i < decoder_block_count; i++) {
     decoder_blocks_.emplace_back(compute_engine_,
                                  GetDecoderBlockParam(model_, i));
   }
-
-  const int64_t vocab_size = model_.GetVocabSize();
-  logits_storage_ = compute_engine_.Alloc(vocab_size);
-  logits_ = logits_storage_->AsVector(vocab_size);
 }
 
 Transformer::~Transformer() = default;
 
 std::span<const float> Transformer::Prefill(std::span<const Token> tokens) {
-  // A very simple version of Prefill is to call Predict on each token.
-  std::span<const float> logits;
-  for (const auto& token : tokens) {
-    logits = Predict(token);
-  }
-  return logits;
-}
-
-std::span<const float> Transformer::Predict(Token token) {
-  VectorView block_input = LookupTokenEmbedding(token);
+  MatrixView block_input = LookupTokenEmbeddings(tokens);
   for (auto& decoder_block : decoder_blocks_) {
     block_input = decoder_block.Forward(block_input);
   }
 
-  VectorView final_rms_output = final_rms_norm_.Forward(block_input);
+  // Run final output block for the last token.
+  VectorView final_rms_output =
+      final_rms_norm_.Forward(block_input.Bottom(1)).At(0);
 
   // Linear layer.
-  compute_engine_.MatMul(logits_, token_embeddings_, final_rms_output);
+  compute_engine_.MatMul(logits_.Vector(), token_embeddings_, final_rms_output);
 
-  compute_engine_.Softmax(logits_);
+  compute_engine_.Softmax(logits_.Vector());
 
-  return logits_.As<const float>();
+  return logits_.Vector().As<const float>();
 }
 
-VectorView Transformer::LookupTokenEmbedding(Token token) {
-  CHECK_NE(token.id, Token::INVALID.id);
-  VectorView embedding = token_embeddings_.At(token.id);
-  compute_engine_.Copy(embedding_, embedding);
-  return embedding_.View();
+std::span<const float> Transformer::Predict(Token token) {
+  // Predict is just Prefill with batch size 1
+  return Prefill({&token, 1});
+}
+
+MatrixView Transformer::LookupTokenEmbeddings(
+    std::span<const Token> tokens) {
+  embeddings_.Reset(tokens.size());
+
+  for (int i = 0; i < tokens.size(); i++) {
+    CHECK_NE(tokens[i], Token::INVALID);
+    VectorView embedding = token_embeddings_.At(tokens[i].id);
+    compute_engine_.Copy(embeddings_.Matrix().At(i), embedding);
+  }
+
+  return embeddings_.Matrix().Top(tokens.size());
 }
 
 }  // namespace tlm

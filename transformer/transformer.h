@@ -8,6 +8,7 @@
 #include "tensor/tensor_view.h"
 #include "transformer/decoder_block.h"
 #include "transformer/rms_norm_layer.h"
+#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class Model;
@@ -22,21 +23,19 @@ class Transformer {
   std::span<const float> Predict(Token token);
 
  private:
-  VectorView LookupTokenEmbedding(Token token);
+  MatrixView LookupTokenEmbeddings(std::span<const Token> tokens);
 
   const Model& model_;
   ComputeEngine compute_engine_;
 
+  const int embedding_size_;
   MatrixView token_embeddings_;
 
-  std::unique_ptr<Storage> embedding_storage_;
-  MutableVectorView embedding_;
+  MatrixStorage embeddings_;
+  VectorStorage logits_;
 
   std::vector<DecoderBlock> decoder_blocks_;
   RmsNormLayer final_rms_norm_;
-
-  std::unique_ptr<Storage> logits_storage_;
-  MutableVectorView logits_;
 };
 
 }  // namespace tlm

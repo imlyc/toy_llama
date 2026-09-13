@@ -4,6 +4,7 @@
 
 #include "compute/storage.h"
 #include "tensor/tensor_view.h"
+#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class ComputeEngine;
@@ -30,7 +31,7 @@ class GroupQueryAttnBlock {
 
   GroupQueryAttnBlock(GroupQueryAttnBlock&&);
 
-  VectorView Forward(VectorView input);
+  MatrixView Forward(MatrixView input);
 
  private:
   ComputeEngine& compute_;
@@ -48,20 +49,11 @@ class GroupQueryAttnBlock {
   MatrixView wo_;
   VectorView rope_freqs_;
 
-  std::unique_ptr<Storage> query_storage_;
-  MutableVectorView query_;
-
-  std::unique_ptr<Storage> k_cache_storage_;
-  MutableMatrixView k_cache_;
-
-  std::unique_ptr<Storage> v_cache_storage_;
-  MutableMatrixView v_cache_;
-
-  std::unique_ptr<Storage> attn_storage_;
-  MutableVectorView attn_;
-
-  std::unique_ptr<Storage> output_storage_;
-  MutableVectorView output_;
+  MatrixStorage query_;
+  MatrixStorage k_cache_;
+  MatrixStorage v_cache_;
+  MatrixStorage attn_;
+  MatrixStorage output_;
 };
 
 }  // namespace tlm

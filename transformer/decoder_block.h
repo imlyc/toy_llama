@@ -6,6 +6,7 @@
 #include "transformer/group_query_attn_block.h"
 #include "transformer/rms_norm_layer.h"
 #include "transformer/swiglu_ffn_block.h"
+#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class ComputeEngine;
@@ -26,7 +27,7 @@ class DecoderBlock {
 
   DecoderBlock(DecoderBlock&&);
 
-  VectorView Forward(VectorView input);
+  MatrixView Forward(MatrixView input);
 
  private:
   ComputeEngine& compute_engine_;
@@ -35,11 +36,8 @@ class DecoderBlock {
   RmsNormLayer ffn_norm_;
   SwiGluFfnBlock swiglu_ffn_block_;
 
-  std::unique_ptr<Storage> attn_output_storage_;
-  MutableVectorView attn_output_;
-
-  std::unique_ptr<Storage> decoder_block_output_storage_;
-  MutableVectorView decoder_block_output_;
+  MatrixStorage attn_output_;
+  MatrixStorage decoder_block_output_;
 };
 
 }  // namespace tlm

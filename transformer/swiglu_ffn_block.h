@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tensor/tensor_view.h"
+#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class ComputeEngine;
@@ -19,7 +20,7 @@ class SwiGluFfnBlock {
 
   SwiGluFfnBlock(SwiGluFfnBlock&&);
 
-  VectorView Forward(VectorView input);
+  MatrixView Forward(MatrixView input);
 
  private:
   ComputeEngine& compute_;
@@ -28,14 +29,9 @@ class SwiGluFfnBlock {
   MatrixView wgate_;
   MatrixView wdown_;
 
-  std::unique_ptr<Storage> up_storage_;
-  MutableVectorView up_;
-
-  std::unique_ptr<Storage> gate_storage_;
-  MutableVectorView gate_;
-
-  std::unique_ptr<Storage> output_storage_;
-  MutableVectorView output_;
+  MatrixStorage up_;
+  MatrixStorage gate_;
+  MatrixStorage output_;
 };
 
 }  // namespace tlm

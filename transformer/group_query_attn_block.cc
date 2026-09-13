@@ -15,47 +15,46 @@ GroupQueryAttnBlock::GroupQueryAttnBlock(ComputeEngine& compute,
       wk_(param.wk),
       wv_(param.wv),
       wo_(param.wo),
-      rope_freqs_(param.rope_freqs) {
-  query_storage_ = compute_.Alloc(param.key_size * head_count_);
-  query_ = query_storage_->AsVector(param.key_size * head_count_);
-  k_cache_storage_ =
-      compute_.Alloc(param.context_length * param.key_size * head_count_kv_);
-  k_cache_ = k_cache_storage_->AsMatrix(param.context_length,
-                                        param.key_size * head_count_kv_);
-  v_cache_storage_ =
-      compute_.Alloc(param.context_length * param.value_size * head_count_kv_);
-  v_cache_ = v_cache_storage_->AsMatrix(param.context_length,
-                                        param.value_size * head_count_kv_);
-  attn_storage_ = compute_.Alloc(param.value_size * head_count_);
-  attn_ = attn_storage_->AsVector(param.value_size * head_count_);
-  output_storage_ = compute_.Alloc(wo_.shape[0]);
-  output_ = output_storage_->AsVector(wo_.shape[0]);
-}
+      rope_freqs_(param.rope_freqs),
+      query_(compute_, param.key_size * head_count_),
+      k_cache_(compute_, param.context_length, param.key_size * head_count_kv_),
+      v_cache_(compute_,
+               param.context_length,
+               param.value_size * head_count_kv_),
+      attn_(compute_, param.value_size * head_count_),
+      output_(compute_, wo_.shape[0]) {}
 GroupQueryAttnBlock::~GroupQueryAttnBlock() = default;
 
 GroupQueryAttnBlock::GroupQueryAttnBlock(GroupQueryAttnBlock&&) = default;
 
-VectorView GroupQueryAttnBlock::Forward(VectorView input) {
-  compute_.MatMul(query_, wq_, input);
-  compute_.Rope(query_, token_index_, rope_freq_base_, rope_dimension_count_,
-                rope_freqs_);
+MatrixView GroupQueryAttnBlock::Forward(MatrixView input) {
+  query_.Reset(input.shape[0]);
+  attn_.Reset(input.shape[0]);
+  output_.Reset(input.shape[0]);
 
-  MutableVectorView key = k_cache_.At(token_index_);
-  compute_.MatMul(key, wk_, input);
+  compute_.MatMulT(query_.Matrix(), input, wq_);
+  compute_.Rope(query_.Matrix(), token_index_, rope_freq_base_,
+                rope_dimension_count_, rope_freqs_);
+
+  MutableMatrixView key =
+      k_cache_.Matrix().Slice<true>(token_index_, input.shape[0]);
+  compute_.MatMulT(key, input, wk_);
   compute_.Rope(key, token_index_, rope_freq_base_, rope_dimension_count_,
                 rope_freqs_);
 
-  MutableVectorView value = v_cache_.At(token_index_);
-  compute_.MatMul(value, wv_, input);
+  MutableMatrixView value =
+      v_cache_.Matrix().Slice<true>(token_index_, input.shape[0]);
+  compute_.MatMulT(value, input, wv_);
 
-  int64_t length = token_index_ + 1;
-  compute_.Attn(attn_, query_.View(), k_cache_.Top(length),
-                v_cache_.Top(length), head_count_, head_count_kv_);
+  int64_t length = token_index_ + input.shape[0];
+  compute_.Attn(attn_.Matrix(), query_.Matrix().View(),
+                k_cache_.Matrix().Top(length), v_cache_.Matrix().Top(length),
+                head_count_, head_count_kv_);
 
-  compute_.MatMul(output_, wo_, attn_.View());
+  compute_.MatMulT(output_.Matrix(), attn_.Matrix().View(), wo_);
 
-  token_index_++;
-  return output_.View();
+  token_index_ += input.shape[0];
+  return output_.Matrix().View();
 }
 
 }  // namespace tlm

@@ -9,24 +9,24 @@ SwiGluFfnBlock::SwiGluFfnBlock(ComputeEngine& compute, const Param& param)
     : compute_(compute),
       wup_(param.wup),
       wgate_(param.wgate),
-      wdown_(param.wdown) {
-  up_storage_ = compute_.Alloc(wup_.shape[0]);
-  up_ = up_storage_->AsVector(wup_.shape[0]);
-  gate_storage_ = compute_.Alloc(wgate_.shape[0]);
-  gate_ = gate_storage_->AsVector(wgate_.shape[0]);
-  output_storage_ = compute_.Alloc(wdown_.shape[0]);
-  output_ = output_storage_->AsVector(wdown_.shape[0]);
-}
+      wdown_(param.wdown),
+      up_(compute_, wup_.shape[0]),
+      gate_(compute_, wgate_.shape[0]),
+      output_(compute_, wdown_.shape[0]) {}
 SwiGluFfnBlock::~SwiGluFfnBlock() = default;
 
 SwiGluFfnBlock::SwiGluFfnBlock(SwiGluFfnBlock&&) = default;
 
-VectorView SwiGluFfnBlock::Forward(VectorView input) {
-  compute_.MatMul(up_, wup_, input);
-  compute_.MatMul(gate_, wgate_, input);
-  compute_.SwiGluMul(gate_, up_.View());
-  compute_.MatMul(output_, wdown_, gate_.View());
-  return output_.View();
+MatrixView SwiGluFfnBlock::Forward(MatrixView input) {
+  up_.Reset(input.shape[0]);
+  gate_.Reset(input.shape[0]);
+  output_.Reset(input.shape[0]);
+
+  compute_.MatMulT(up_.Matrix(), input, wup_);
+  compute_.MatMulT(gate_.Matrix(), input, wgate_);
+  compute_.SwiGluMul(gate_.Matrix(), up_.Matrix().View());
+  compute_.MatMulT(output_.Matrix(), gate_.Matrix().View(), wdown_);
+  return output_.Matrix().View();
 }
 
 }  // namespace tlm

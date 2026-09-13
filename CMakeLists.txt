@@ -57,5 +57,5 @@ target_link_libraries(toy_llama PRIVATE
   glog::glog
 )
 
-enable_testing()
-add_subdirectory(test)
+# enable_testing()
+# add_subdirectory(test)

@@ -9,17 +9,16 @@ RmsNormLayer::RmsNormLayer(ComputeEngine& compute,
                            const Param& param)
     : compute_(compute),
       gamma_(param.gamma),
-      epsilon_(param.epsilon) {
-  output_storage_ = compute_.Alloc(gamma_.shape[0]);
-  output_ = output_storage_->AsVector(gamma_.shape[0]);
-}
+      epsilon_(param.epsilon),
+      output_(compute_, gamma_.shape[0]) {}
 RmsNormLayer::~RmsNormLayer() = default;
 
 RmsNormLayer::RmsNormLayer(RmsNormLayer&&) = default;
 
-VectorView RmsNormLayer::Forward(VectorView input) {
-  compute_.RmsNorm(output_, input, gamma_, epsilon_);
-  return output_.View();
+MatrixView RmsNormLayer::Forward(MatrixView input) {
+  output_.Reset(input.shape[0]);
+  compute_.RmsNorm(output_.Matrix(), input, gamma_, epsilon_);
+  return output_.Matrix().View();
 }
 
 }  // namespace tlm
