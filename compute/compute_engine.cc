@@ -224,7 +224,11 @@ void ComputeEngine::MatMulT(MutableMatrixView out,
       break;
 
     case DType::Q8_0:
-      MatMulTQ8_0(out, lhs, rhs);
+      if (out.shape[0] == 1) {
+        MatMulQ8_0(out.At(0), rhs, lhs.At(0));
+      } else {
+        MatMulTQ8_0(out, lhs, rhs);
+      }
       break;
 
     default:
