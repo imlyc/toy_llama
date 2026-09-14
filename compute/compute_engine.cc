@@ -1,5 +1,6 @@
 #include "compute/compute_engine.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include <Eigen/Dense>
@@ -112,25 +113,31 @@ void MatMulTQ8_0(MutableMatrixView out, MatrixView lhs, MatrixView rhs) {
   Map<RowMatrixXf> out_mat = CreateRowMatrixXf(out);
   Map<const RowMatrixXf> lhs_mat = CreateRowMatrixXf(lhs);
   std::span<const BlockQ8_0> rhs_data = rhs.As<const BlockQ8_0>();
-  VectorXf acc(lhs.shape[0]);
-  Eigen::Vector<float, sizeof(BlockQ8_0::data)> scaled_row;
-
   const int64_t block_count_per_row = rhs.shape[1] / sizeof(BlockQ8_0::data);
-  // transpose(rhs) is handled by constructing a row major vector.
-  for (int64_t row = 0; row < rhs.shape[0]; row++) {
+  const int64_t rhs_tile_row_step = 64;
+  RowMatrixXf acc(lhs.shape[0], rhs_tile_row_step); 
+  RowMatrixXf scaled_blocks(rhs_tile_row_step, sizeof(BlockQ8_0::data));
+
+  // Calculate lhs.row @ transpose(rhs.tile). A rhs.tile contains 64 rows x 1
+  // Q8_0 block.
+  for (int64_t row = 0; row < rhs.shape[0]; row += rhs_tile_row_step) {
     acc.setZero();
+    int64_t rhs_tile_rows = std::min(rhs_tile_row_step, rhs.shape[0] - row);
     for (int64_t block = 0; block < block_count_per_row; block++) {
-      const BlockQ8_0& block_data = rhs_data[row * block_count_per_row + block];
-      // 32 x 1
-      Map<const Eigen::Vector<int8_t, sizeof(BlockQ8_0::data)>> row_data(
-          block_data.data);
-      scaled_row =
-          row_data.cast<float>() * static_cast<float>(block_data.scale);
-      acc.noalias() += lhs_mat.middleCols<sizeof(BlockQ8_0::data)>(
-                           block * sizeof(BlockQ8_0::data)) *
-                       scaled_row;
+      for (int64_t tile_row = 0; tile_row < rhs_tile_rows; tile_row++) {
+        const BlockQ8_0& block_data =
+            rhs_data[(row + tile_row) * block_count_per_row + block];
+        Map<const Eigen::Vector<int8_t, sizeof(BlockQ8_0::data)>> row_data(
+            block_data.data);
+        scaled_blocks.row(tile_row) =
+            row_data.transpose().cast<float>() * block_data.scale;
+      }
+      acc.leftCols(rhs_tile_rows).noalias() +=
+          lhs_mat.middleCols<sizeof(BlockQ8_0::data)>(block *
+                                                      sizeof(BlockQ8_0::data)) *
+          scaled_blocks.topRows(rhs_tile_rows).transpose();
     }
-    out_mat.col(row) = acc;
+    out_mat.middleCols(row, rhs_tile_rows) = acc.leftCols(rhs_tile_rows);
   }
 }
 
