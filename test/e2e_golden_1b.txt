@@ -1,0 +1,5 @@
+model llama-3.2-1b-instruct-q8_0.gguf
+generated_token_count 36
+reply According to the passage, the three things the lighthouse keeper carried up the stairs are:\n\n1. A brass lantern\n2. A tin of matches\n3. A logbook
+prefill_ms 10275.8
+decode_ms_per_token 91.7673
