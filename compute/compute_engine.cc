@@ -114,28 +114,42 @@ void MatMulTQ8_0(MutableMatrixView out, MatrixView lhs, MatrixView rhs) {
   Map<const RowMatrixXf> lhs_mat = CreateRowMatrixXf(lhs);
   std::span<const BlockQ8_0> rhs_data = rhs.As<const BlockQ8_0>();
   const int64_t block_count_per_row = rhs.shape[1] / sizeof(BlockQ8_0::data);
-  const int64_t rhs_tile_row_step = 64;
-  RowMatrixXf acc(lhs.shape[0], rhs_tile_row_step); 
-  RowMatrixXf scaled_blocks(rhs_tile_row_step, sizeof(BlockQ8_0::data));
 
-  // Calculate lhs.row @ transpose(rhs.tile). A rhs.tile contains 64 rows x 1
-  // Q8_0 block.
+  const int64_t rhs_tile_row_step = 64;
+  const int64_t rhs_tile_block_step = 8;
+  RowMatrixXf acc(lhs.shape[0], rhs_tile_row_step);
+  RowMatrixXf scaled_blocks(rhs_tile_row_step,
+                            sizeof(BlockQ8_0::data) * rhs_tile_block_step);
+
+  // Calculate lhs.row @ transpose(rhs.tile). A rhs.tile contains 64 rows x 8
+  // Q8_0 block (256 floats).
   for (int64_t row = 0; row < rhs.shape[0]; row += rhs_tile_row_step) {
     acc.setZero();
     int64_t rhs_tile_rows = std::min(rhs_tile_row_step, rhs.shape[0] - row);
-    for (int64_t block = 0; block < block_count_per_row; block++) {
+    for (int64_t block = 0; block < block_count_per_row;
+         block += rhs_tile_block_step) {
+      int64_t rhs_tile_blocks =
+          std::min(rhs_tile_block_step, block_count_per_row - block);
       for (int64_t tile_row = 0; tile_row < rhs_tile_rows; tile_row++) {
-        const BlockQ8_0& block_data =
-            rhs_data[(row + tile_row) * block_count_per_row + block];
-        Map<const Eigen::Vector<int8_t, sizeof(BlockQ8_0::data)>> row_data(
-            block_data.data);
-        scaled_blocks.row(tile_row) =
-            row_data.transpose().cast<float>() * block_data.scale;
+        for (int64_t tile_block = 0; tile_block < rhs_tile_blocks;
+             tile_block++) {
+          const BlockQ8_0& block_data =
+              rhs_data[(row + tile_row) * block_count_per_row + block +
+                       tile_block];
+          Map<const Eigen::Vector<int8_t, sizeof(BlockQ8_0::data)>> tile_vec(
+              block_data.data);
+          scaled_blocks.row(tile_row).segment(
+              tile_block * sizeof(BlockQ8_0::data), sizeof(BlockQ8_0::data)) =
+              tile_vec.transpose().cast<float>() * block_data.scale;
+        }
       }
       acc.leftCols(rhs_tile_rows).noalias() +=
-          lhs_mat.middleCols<sizeof(BlockQ8_0::data)>(block *
-                                                      sizeof(BlockQ8_0::data)) *
-          scaled_blocks.topRows(rhs_tile_rows).transpose();
+          lhs_mat.middleCols(block * sizeof(BlockQ8_0::data),
+                             rhs_tile_blocks * sizeof(BlockQ8_0::data)) *
+          scaled_blocks
+              .topLeftCorner(rhs_tile_rows,
+                             rhs_tile_blocks * sizeof(BlockQ8_0::data))
+              .transpose();
     }
     out_mat.middleCols(row, rhs_tile_rows) = acc.leftCols(rhs_tile_rows);
   }
