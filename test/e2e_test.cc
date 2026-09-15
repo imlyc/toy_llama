@@ -163,9 +163,12 @@ TEST(E2eTest, GoldenOutputAndPrefillSpeed) {
   ModelLoader loader;
   std::unique_ptr<Model> model = loader.Load(model_path);
   ASSERT_NE(model, nullptr) << "failed to load " << model_path;
-  TouchWeights(*model);
 
   ChatEngine chat_engine(*model);
+  // Warm the weights AFTER the engine has allocated its KV cache: on a large
+  // context that allocation can evict the freshly faulted weight pages, which
+  // would put disk reads inside the timed prefill.
+  TouchWeights(*model);
 
   // One timestamp per streamed token. The first marks the end of prompt
   // processing; each later one marks the end of a decode step. The final
