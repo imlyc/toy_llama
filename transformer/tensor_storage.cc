@@ -5,7 +5,7 @@
 
 namespace tlm {
 namespace {
-constexpr int kInitialMatrixRowCount = 32;
+constexpr int kMatrixChunkRowCount = 512;
 }  // namespace
 
 MatrixStorage::MatrixStorage(ComputeEngine& compute, int64_t row, int64_t col)
@@ -14,19 +14,11 @@ MatrixStorage::MatrixStorage(ComputeEngine& compute, int64_t row, int64_t col)
       view_(storage_->AsMatrix(row, col)) {}
 
 MatrixStorage::MatrixStorage(ComputeEngine& compute, int64_t col)
-    : MatrixStorage(compute, kInitialMatrixRowCount, col) {}
+    : MatrixStorage(compute, kMatrixChunkRowCount, col) {}
 
 MatrixStorage::~MatrixStorage() = default;
 
 MatrixStorage::MatrixStorage(MatrixStorage&&) = default;
-
-void MatrixStorage::Reset(int64_t row) {
-  if (row > view_.shape[0]) {
-    storage_ = compute_.Alloc(row * view_.shape[1]);
-  }
-
-  view_ = storage_->AsMatrix(row, view_.shape[1]);
-}
 
 MutableMatrixView& MatrixStorage::Matrix() {
   return view_;

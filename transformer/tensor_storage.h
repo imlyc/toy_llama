@@ -8,8 +8,6 @@ namespace tlm {
 class ComputeEngine;
 class Storage;
 
-// TODO: Consider chunk the prefill input so that we have a fixed memory size.
-
 // Storage for matrix with updatable row but fixed col.
 class MatrixStorage {
  public:
@@ -18,9 +16,6 @@ class MatrixStorage {
   ~MatrixStorage();
 
   MatrixStorage(MatrixStorage&&);
-
-  // Reset the storage to have at least `row` row. Data may be wiped.
-  void Reset(int64_t row);
 
   MutableMatrixView& Matrix();
 

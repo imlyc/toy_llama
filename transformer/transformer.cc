@@ -1,5 +1,7 @@
 #include "transformer/transformer.h"
 
+#include <algorithm>
+
 #include <glog/logging.h>
 
 #include "compute/storage.h"
@@ -58,9 +60,16 @@ Transformer::Transformer(const Model& model)
 Transformer::~Transformer() = default;
 
 std::span<const float> Transformer::Prefill(std::span<const Token> tokens) {
-  MatrixView block_input = LookupTokenEmbeddings(tokens);
-  for (auto& decoder_block : decoder_blocks_) {
-    block_input = decoder_block.Forward(block_input);
+  MatrixView block_input;
+  int64_t token_counts = 0;
+  const int64_t chunk_size = embeddings_.Matrix().shape[0];
+  for (int64_t chunk = 0; chunk < tokens.size(); chunk += chunk_size) {
+    token_counts =
+        std::min(chunk_size, static_cast<int64_t>(tokens.size()) - chunk);
+    block_input = LookupTokenEmbeddings(tokens.subspan(chunk, token_counts));
+    for (auto& decoder_block : decoder_blocks_) {
+      block_input = decoder_block.Forward(block_input);
+    }
   }
 
   // Run final output block for the last token.
@@ -82,8 +91,6 @@ std::span<const float> Transformer::Predict(Token token) {
 
 MatrixView Transformer::LookupTokenEmbeddings(
     std::span<const Token> tokens) {
-  embeddings_.Reset(tokens.size());
-
   for (int i = 0; i < tokens.size(); i++) {
     CHECK_NE(tokens[i], Token::INVALID);
     VectorView embedding = token_embeddings_.At(tokens[i].id);
