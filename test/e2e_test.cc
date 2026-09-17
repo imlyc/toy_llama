@@ -6,6 +6,7 @@
 //   TOY_LLAMA_MODEL=<path.gguf>       required; the test is skipped otherwise.
 //   TOY_LLAMA_GOLDEN=<path.txt>       optional. Missing file: record this run.
 //                                     Existing file: compare against it.
+//   TOY_LLAMA_GOLDEN_LONG=<path.txt>  same, for the long-prompt case.
 //   TOY_LLAMA_MIN_PREFILL_SPEEDUP=x   optional, default 1.2. In compare mode,
 //                                     golden_prefill_ms / prefill_ms must be
 //                                     at least this.
@@ -154,7 +155,30 @@ void TouchWeights(const Model& model) {
   }
 }
 
-TEST(E2eTest, GoldenOutputAndPrefillSpeed) {
+// A prompt well past one prefill chunk (~1100 tokens after the template):
+// the passage repeated with distinct labels, then the question. Exercises two
+// full 512-token chunks plus a tail, and attention across chunk boundaries.
+std::string LongMessage() {
+  std::string message =
+      "Here are several copies of a short passage, each with a label. Read "
+      "them and answer the question at the end.\n\n";
+  for (int i = 1; i <= 10; ++i) {
+    message += "Passage " + std::to_string(i) + ": ";
+    message +=
+        "The lighthouse keeper climbed the spiral stairs every evening at "
+        "dusk. He carried a brass lantern, a tin of matches, and a logbook in "
+        "which he recorded the weather, the ships that passed, and the birds "
+        "that rested on the railing. On stormy nights the beam swept the "
+        "water in slow circles, and fishing boats used it to find the harbor "
+        "mouth.\n\n";
+  }
+  message += "Question: What three things did the keeper carry up the stairs?";
+  return message;
+}
+
+// Sends `message` through a fresh ChatEngine, records prefill/decode timing
+// and the reply, then records or checks the golden at `golden_env`.
+void RunGoldenCase(const std::string& message, const char* golden_env) {
   const char* model_path = std::getenv("TOY_LLAMA_MODEL");
   if (model_path == nullptr) {
     GTEST_SKIP() << "Set TOY_LLAMA_MODEL=<path.gguf> to run the e2e test.";
@@ -178,7 +202,7 @@ TEST(E2eTest, GoldenOutputAndPrefillSpeed) {
   actual.model = std::filesystem::path(model_path).filename().string();
   std::vector<Clock::time_point> token_times;
   const Clock::time_point start = Clock::now();
-  chat_engine.SendMessageAsync(kMessage, [&](const std::string& text) {
+  chat_engine.SendMessageAsync(message, [&](const std::string& text) {
     token_times.push_back(Clock::now());
     actual.reply += text;
   });
@@ -193,6 +217,7 @@ TEST(E2eTest, GoldenOutputAndPrefillSpeed) {
       ElapsedMs(token_times.front(), end) / actual.generated_token_count;
 
   std::cout << "model:            " << actual.model << "\n"
+            << "message bytes:    " << message.size() << "\n"
             << "prefill:          " << actual.prefill_ms << " ms\n"
             << "decode:           " << actual.decode_ms_per_token
             << " ms/token over " << actual.generated_token_count
@@ -200,9 +225,9 @@ TEST(E2eTest, GoldenOutputAndPrefillSpeed) {
             << "reply (" << actual.generated_token_count << " tokens): "
             << actual.reply << "\n";
 
-  const char* golden_path = std::getenv("TOY_LLAMA_GOLDEN");
+  const char* golden_path = std::getenv(golden_env);
   if (golden_path == nullptr) {
-    std::cout << "TOY_LLAMA_GOLDEN not set: nothing to compare.\n";
+    std::cout << golden_env << " not set: nothing to compare.\n";
     return;
   }
 
@@ -237,6 +262,17 @@ TEST(E2eTest, GoldenOutputAndPrefillSpeed) {
   EXPECT_GE(prefill_speedup, min_speedup)
       << "prefill did not get faster: golden " << golden.prefill_ms
       << " ms, now " << actual.prefill_ms << " ms";
+}
+
+// Short prompt (~110 tokens): fits in a single prefill chunk.
+TEST(E2eTest, GoldenOutputAndPrefillSpeed) {
+  RunGoldenCase(kMessage, "TOY_LLAMA_GOLDEN");
+}
+
+// Long prompt (~1100 tokens): spans multiple prefill chunks. Golden path comes
+// from TOY_LLAMA_GOLDEN_LONG so the two cases keep separate records.
+TEST(E2eTest, LongPromptGoldenOutputAndPrefillSpeed) {
+  RunGoldenCase(LongMessage(), "TOY_LLAMA_GOLDEN_LONG");
 }
 
 }  // namespace
