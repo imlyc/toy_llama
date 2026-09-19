@@ -1,6 +1,8 @@
 #include "tensor/tensor_view.h"
 
 #include <cstddef>
+#include <span>
+#include <type_traits>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -30,10 +32,10 @@ class Tensor3F32Fixture : public ::testing::Test {
   }
 
   Tensor3View View() const {
-    return {DType::F32, base(), {2, 3, 4}, {48, 16, 4}};
+    return Tensor3View::Create(DType::F32, base(), 2, 3, 4);
   }
   MutableTensor3View MutableView() {
-    return {DType::F32, mutable_base(), {2, 3, 4}, {48, 16, 4}};
+    return MutableTensor3View::Create(DType::F32, mutable_base(), 2, 3, 4);
   }
 
   std::vector<float> data_;
@@ -147,13 +149,13 @@ class Tensor3Q8Fixture : public ::testing::Test {
 
   // A [2, 64] view over the first 4 blocks.
   MatrixView Matrix() const {
-    return {DType::Q8_0, base(), {2, 64}, {68, 34}};
+    return MatrixView::Create(DType::Q8_0, base(), 2, 64);
   }
   Tensor3View Tensor3() const {
-    return {DType::Q8_0, base(), {2, 2, 64}, {136, 68, 34}};
+    return Tensor3View::Create(DType::Q8_0, base(), 2, 2, 64);
   }
   MutableTensor3View MutableTensor3() {
-    return {DType::Q8_0, mutable_base(), {2, 2, 64}, {136, 68, 34}};
+    return MutableTensor3View::Create(DType::Q8_0, mutable_base(), 2, 2, 64);
   }
 
   std::vector<std::byte> data_;
@@ -332,6 +334,131 @@ TEST(TensorViewCreate, NavigatesWithAtAndAs) {
   EXPECT_FLOAT_EQ(row[1], 21.f);
   EXPECT_FLOAT_EQ(row[2], 22.f);
   EXPECT_FLOAT_EQ(row[3], 23.f);
+}
+
+// ── Mutable -> immutable conversion ───────────────────────────────────────────
+//
+// A mutable view converts implicitly to the immutable view of the same rank
+// (the span<T> -> span<const T> direction). The reverse never compiles.
+
+// A [4, 3] F32 matrix with element (i, j) = 10*i + j.
+class ConversionFixture : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    data_.resize(4 * 3);
+    for (int i = 0; i < 4; ++i) {
+      for (int j = 0; j < 3; ++j) data_[i * 3 + j] = 10.f * i + j;
+    }
+  }
+
+  MutableMatrixView Mutable() {
+    return MutableMatrixView::Create(
+        DType::F32, reinterpret_cast<std::byte*>(data_.data()), 4, 3);
+  }
+
+  std::vector<float> data_;
+};
+
+// Something that only accepts an immutable view, like every kernel input.
+int64_t RowsOf(MatrixView m) { return m.shape[0]; }
+
+TEST_F(ConversionFixture, MutableConvertsToImmutableImplicitly) {
+  MutableMatrixView mut = Mutable();
+  MatrixView imm = mut;  // copy-initialization, no cast
+
+  EXPECT_EQ(imm.dtype, mut.dtype);
+  EXPECT_EQ(imm.data, mut.data);  // same memory, not a copy of the data
+  EXPECT_EQ(imm.shape, mut.shape);
+  EXPECT_EQ(imm.stride, mut.stride);
+  EXPECT_EQ(RowsOf(mut), 4);  // passes straight into a MatrixView parameter
+}
+
+TEST_F(ConversionFixture, ImmutableNeverConvertsToMutable) {
+  static_assert(!std::is_convertible_v<MatrixView, MutableMatrixView>);
+  static_assert(!std::is_constructible_v<MutableMatrixView, MatrixView>);
+  static_assert(!std::is_convertible_v<VectorView, MutableVectorView>);
+  static_assert(!std::is_convertible_v<Tensor3View, MutableTensor3View>);
+  // Same-mutability copies still work in both flavours.
+  static_assert(std::is_copy_constructible_v<MatrixView>);
+  static_assert(std::is_copy_constructible_v<MutableMatrixView>);
+}
+
+// The converted view reads the same bytes the mutable one writes.
+TEST_F(ConversionFixture, ConvertedViewObservesWrites) {
+  MutableMatrixView mut = Mutable();
+  MatrixView imm = mut;
+
+  mut.As<float>()[4] = 99.f;  // element (1, 1)
+
+  EXPECT_FLOAT_EQ(imm.As<const float>()[4], 99.f);
+}
+
+// ── Slice / Top / Bottom ──────────────────────────────────────────────────────
+//
+// Slicing along the first dimension keeps the mutability of the source view;
+// the result converts to immutable like any other mutable view.
+
+TEST_F(ConversionFixture, SlicePreservesMutability) {
+  MutableMatrixView mut = Mutable();
+  const MatrixView imm = mut;
+
+  static_assert(std::is_same_v<decltype(mut.Slice(0, 1)), MutableMatrixView>);
+  static_assert(std::is_same_v<decltype(mut.Top(1)), MutableMatrixView>);
+  static_assert(std::is_same_v<decltype(mut.Bottom(1)), MutableMatrixView>);
+  static_assert(std::is_same_v<decltype(imm.Slice(0, 1)), MatrixView>);
+  static_assert(std::is_same_v<decltype(imm.Top(1)), MatrixView>);
+  static_assert(std::is_same_v<decltype(imm.Bottom(1)), MatrixView>);
+}
+
+TEST_F(ConversionFixture, SliceOffsetsAndShape) {
+  MatrixView m = Mutable();
+  MatrixView s = m.Slice(1, 2);  // rows 1..2
+
+  EXPECT_EQ(s.data, m.data + m.stride[0]);
+  EXPECT_EQ(s.shape[0], 2);
+  EXPECT_EQ(s.shape[1], 3);  // inner dim untouched
+  EXPECT_EQ(s.stride, m.stride);
+  EXPECT_EQ(s.TotalBytes(), 2 * 3 * 4);
+
+  std::span<const float> vals = s.As<const float>();
+  ASSERT_EQ(vals.size(), 6u);
+  EXPECT_FLOAT_EQ(vals[0], 10.f);  // (1, 0)
+  EXPECT_FLOAT_EQ(vals[5], 22.f);  // (2, 2)
+}
+
+TEST_F(ConversionFixture, TopAndBottomAreSliceEndpoints) {
+  MatrixView m = Mutable();
+
+  MatrixView top = m.Top(2);
+  EXPECT_EQ(top.data, m.data);
+  EXPECT_EQ(top.shape[0], 2);
+
+  MatrixView bottom = m.Bottom(1);
+  EXPECT_EQ(bottom.data, m.data + 3 * m.stride[0]);
+  EXPECT_EQ(bottom.shape[0], 1);
+  EXPECT_FLOAT_EQ(bottom.As<const float>()[0], 30.f);  // (3, 0)
+}
+
+// A mutable slice writes through to the backing rows, and only those rows.
+TEST_F(ConversionFixture, MutableSliceWritesThrough) {
+  MutableMatrixView rows = Mutable().Slice(2, 1);  // row 2
+  std::span<float> vals = rows.As<float>();
+  ASSERT_EQ(vals.size(), 3u);
+  vals[1] = -1.f;
+
+  EXPECT_FLOAT_EQ(data_[2 * 3 + 1], -1.f);
+  EXPECT_FLOAT_EQ(data_[1 * 3 + 1], 11.f);  // row above untouched
+  EXPECT_FLOAT_EQ(data_[3 * 3 + 1], 31.f);  // row below untouched
+}
+
+// The everyday pattern from the blocks: slice a mutable buffer, hand the
+// slice to a kernel as its output, then pass the same slice on as an
+// immutable input with no explicit conversion.
+TEST_F(ConversionFixture, MutableSliceFlowsIntoImmutableParameter) {
+  MutableMatrixView out = Mutable().Top(2);
+  EXPECT_EQ(RowsOf(out), 2);
+  MatrixView next_input = out;
+  EXPECT_EQ(next_input.data, out.data);
 }
 
 }  // namespace
