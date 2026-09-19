@@ -18,15 +18,15 @@ SwiGluFfnBlock::~SwiGluFfnBlock() = default;
 SwiGluFfnBlock::SwiGluFfnBlock(SwiGluFfnBlock&&) = default;
 
 MatrixView SwiGluFfnBlock::Forward(MatrixView input) {
-  MutableMatrixView up = up_.Matrix().Top<true>(input.shape[0]);
-  MutableMatrixView gate = gate_.Matrix().Top<true>(input.shape[0]);
-  MutableMatrixView output = output_.Matrix().Top<true>(input.shape[0]);
+  MutableMatrixView up = up_.Matrix().Top(input.shape[0]);
+  MutableMatrixView gate = gate_.Matrix().Top(input.shape[0]);
+  MutableMatrixView output = output_.Matrix().Top(input.shape[0]);
 
   compute_.MatMulT(up, input, wup_);
   compute_.MatMulT(gate, input, wgate_);
-  compute_.SwiGluMul(gate, up.View());
-  compute_.MatMulT(output, gate.View(), wdown_);
-  return output.View();
+  compute_.SwiGluMul(gate, up);
+  compute_.MatMulT(output, gate, wdown_);
+  return output;
 }
 
 }  // namespace tlm

@@ -17,23 +17,21 @@ DecoderBlock::~DecoderBlock() = default;
 DecoderBlock::DecoderBlock(DecoderBlock&&) = default;
 
 MatrixView DecoderBlock::Forward(MatrixView input) {
-  MutableMatrixView attn_output =
-      attn_output_.Matrix().Top<true>(input.shape[0]);
+  MutableMatrixView attn_output = attn_output_.Matrix().Top(input.shape[0]);
   MutableMatrixView decoder_block_output =
-      decoder_block_output_.Matrix().Top<true>(input.shape[0]);
+      decoder_block_output_.Matrix().Top(input.shape[0]);
 
   MatrixView attn_norm_output = attn_norm_.Forward(input);
   MatrixView gqa_output = group_query_attn_.Forward(attn_norm_output);
 
   compute_engine_.Add(attn_output, input, gqa_output);
 
-  MatrixView ffn_norm_output = ffn_norm_.Forward(attn_output.View());
+  MatrixView ffn_norm_output = ffn_norm_.Forward(attn_output);
   MatrixView swiglu_ffn_output = swiglu_ffn_block_.Forward(ffn_norm_output);
 
-  compute_engine_.Add(decoder_block_output, attn_output.View(),
-                      swiglu_ffn_output);
+  compute_engine_.Add(decoder_block_output, attn_output, swiglu_ffn_output);
 
-  return decoder_block_output.View();
+  return decoder_block_output;
 }
 
 }  // namespace tlm

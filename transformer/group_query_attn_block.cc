@@ -28,32 +28,31 @@ GroupQueryAttnBlock::~GroupQueryAttnBlock() = default;
 GroupQueryAttnBlock::GroupQueryAttnBlock(GroupQueryAttnBlock&&) = default;
 
 MatrixView GroupQueryAttnBlock::Forward(MatrixView input) {
-  MutableMatrixView query = query_.Matrix().Top<true>(input.shape[0]);
-  MutableMatrixView attn = attn_.Matrix().Top<true>(input.shape[0]);
-  MutableMatrixView output = output_.Matrix().Top<true>(input.shape[0]);
+  MutableMatrixView query = query_.Matrix().Top(input.shape[0]);
+  MutableMatrixView attn = attn_.Matrix().Top(input.shape[0]);
+  MutableMatrixView output = output_.Matrix().Top(input.shape[0]);
 
   compute_.MatMulT(query, input, wq_);
   compute_.Rope(query, token_index_, rope_freq_base_, rope_dimension_count_,
                 rope_freqs_);
 
-  MutableMatrixView key =
-      k_cache_.Matrix().Slice<true>(token_index_, input.shape[0]);
+  MutableMatrixView key = k_cache_.Matrix().Slice(token_index_, input.shape[0]);
   compute_.MatMulT(key, input, wk_);
   compute_.Rope(key, token_index_, rope_freq_base_, rope_dimension_count_,
                 rope_freqs_);
 
   MutableMatrixView value =
-      v_cache_.Matrix().Slice<true>(token_index_, input.shape[0]);
+      v_cache_.Matrix().Slice(token_index_, input.shape[0]);
   compute_.MatMulT(value, input, wv_);
 
   int64_t length = token_index_ + input.shape[0];
-  compute_.Attn(attn, query.View(), k_cache_.Matrix().Top(length),
+  compute_.Attn(attn, query, k_cache_.Matrix().Top(length),
                 v_cache_.Matrix().Top(length), head_count_, head_count_kv_);
 
-  compute_.MatMulT(output, attn.View(), wo_);
+  compute_.MatMulT(output, attn, wo_);
 
   token_index_ += input.shape[0];
-  return output.View();
+  return output;
 }
 
 }  // namespace tlm

@@ -37,6 +37,17 @@ struct TensorView {
   // stride[Rank-1] is the bytes per block.
   std::array<int64_t, Rank> stride {};
 
+  TensorView() = default;
+
+  // Allow implicit conversion from mutable to immutable.
+  template <bool FromMutable>
+    requires(!Mutable || FromMutable)
+  TensorView(const TensorView<Rank, FromMutable>& from)
+      : dtype(from.dtype),
+        data(from.data),
+        shape(from.shape),
+        stride(from.stride) {}
+
   int64_t TotalBytes() const {
     if constexpr (Rank == 1) {
         return shape[0] / GetDTypeBlockElements(dtype) * stride[0];
@@ -60,33 +71,21 @@ struct TensorView {
     return ret;
   }
 
-  // Return an immutable view of the current tensor.
-  TensorView<Rank, false> View() const {
-    return {dtype, data, shape, stride};
-  }
-
-  // Return an immutable sliced view of the current tensor along the first
-  // dimension.
-  template <bool RetMutable = false>
-    requires (Mutable || !RetMutable)
-  TensorView<Rank, RetMutable> Slice(int64_t index, int64_t len) const {
-    TensorView<Rank, RetMutable> ret = {dtype, data, shape, stride};
+  // Return a sliced view of the current tensor along the first dimension.
+  TensorView<Rank, Mutable> Slice(int64_t index, int64_t len) const {
+    TensorView<Rank, Mutable> ret = *this;
     ret.data += stride[0] * index;
     ret.shape[0] = len;
 
     return ret;
   }
 
-  template <bool RetMutable = false>
-    requires (Mutable || !RetMutable)
-  TensorView<Rank, RetMutable> Top(int64_t len) const {
-    return Slice<RetMutable>(0, len);
+  TensorView<Rank, Mutable> Top(int64_t len) const {
+    return Slice(0, len);
   }
 
-  template <bool RetMutable = false>
-    requires (Mutable || !RetMutable)
-  TensorView<Rank, RetMutable> Bottom(int64_t len) const {
-    return Slice<RetMutable>(shape[0] - len, len);
+  TensorView<Rank, Mutable> Bottom(int64_t len) const {
+    return Slice(shape[0] - len, len);
   }
 
   template <bool OtherMutable>

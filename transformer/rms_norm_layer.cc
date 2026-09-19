@@ -16,9 +16,9 @@ RmsNormLayer::~RmsNormLayer() = default;
 RmsNormLayer::RmsNormLayer(RmsNormLayer&&) = default;
 
 MatrixView RmsNormLayer::Forward(MatrixView input) {
-  MutableMatrixView output = output_.Matrix().Top<true>(input.shape[0]);
+  MutableMatrixView output = output_.Matrix().Top(input.shape[0]);
   compute_.RmsNorm(output, input, gamma_, epsilon_);
-  return output.View();
+  return output;
 }
 
 }  // namespace tlm
