@@ -9,8 +9,7 @@ constexpr int kMatrixChunkRowCount = 512;
 }  // namespace
 
 MatrixStorage::MatrixStorage(ComputeEngine& compute, int64_t row, int64_t col)
-    : compute_(compute),
-      storage_(compute_.Alloc(row * col)),
+    : storage_(compute.Alloc(row * col)),
       view_(storage_->AsMatrix(row, col)) {}
 
 MatrixStorage::MatrixStorage(ComputeEngine& compute, int64_t col)

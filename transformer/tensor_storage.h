@@ -20,7 +20,6 @@ class MatrixStorage {
   MutableMatrixView& Matrix();
 
  private:
-  ComputeEngine& compute_;
   std::unique_ptr<Storage> storage_;
   MutableMatrixView view_;
 };
