@@ -10,16 +10,17 @@ DecoderBlock::DecoderBlock(ComputeEngine& compute_engine, const Param& param)
       group_query_attn_(compute_engine, param.gqa),
       ffn_norm_(compute_engine, param.ffn_norm),
       swiglu_ffn_block_(compute_engine, param.swiglu_ffn),
-      attn_output_(compute_engine_, param.embedding_size),
-      decoder_block_output_(compute_engine_, param.embedding_size) {}
+      attn_output_(compute_engine_.AllocMatrix(param.embedding_size)),
+      decoder_block_output_(compute_engine_.AllocMatrix(param.embedding_size)) {
+}
 DecoderBlock::~DecoderBlock() = default;
 
 DecoderBlock::DecoderBlock(DecoderBlock&&) = default;
 
 MatrixView DecoderBlock::Forward(MatrixView input) {
-  MutableMatrixView attn_output = attn_output_.Matrix().Top(input.shape[0]);
+  MutableMatrixView attn_output = attn_output_.View().Top(input.shape[0]);
   MutableMatrixView decoder_block_output =
-      decoder_block_output_.Matrix().Top(input.shape[0]);
+      decoder_block_output_.View().Top(input.shape[0]);
 
   MatrixView attn_norm_output = attn_norm_.Forward(input);
   MatrixView gqa_output = group_query_attn_.Forward(attn_norm_output);

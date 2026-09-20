@@ -4,15 +4,14 @@
 #include <vector>
 
 #include "compute/compute_engine.h"
+#include "compute/tensor_storage.h"
 #include "model/token.h"
 #include "tensor/tensor_view.h"
 #include "transformer/decoder_block.h"
 #include "transformer/rms_norm_layer.h"
-#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class Model;
-class Storage;
 
 class Transformer {
  public:

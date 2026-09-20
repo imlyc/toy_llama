@@ -3,7 +3,6 @@ add_library(transformer OBJECT
   group_query_attn_block.cc
   rms_norm_layer.cc
   swiglu_ffn_block.cc
-  tensor_storage.cc
   transformer.cc
 )
 

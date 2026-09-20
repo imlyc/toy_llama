@@ -2,9 +2,8 @@
 
 #include <memory>
 
-#include "compute/storage.h"
+#include "compute/tensor_storage.h"
 #include "tensor/tensor_view.h"
-#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class ComputeEngine;

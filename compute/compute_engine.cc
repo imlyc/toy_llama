@@ -6,7 +6,7 @@
 #include <Eigen/Dense>
 #include <glog/logging.h>
 
-#include "compute/storage.h"
+#include "compute/tensor_storage.h"
 #include "tensor/dtype.h"
 
 namespace tlm {
@@ -175,8 +175,16 @@ void Dequant(MutableVectorView out, VectorView in) {
 ComputeEngine::ComputeEngine() = default;
 ComputeEngine::~ComputeEngine() = default;
 
-std::unique_ptr<Storage> ComputeEngine::Alloc(int64_t size) {
-  return std::make_unique<Storage>(size);
+MatrixStorage ComputeEngine::AllocMatrix(int64_t row, int64_t col) {
+  return MatrixStorage({row, col});
+}
+
+MatrixStorage ComputeEngine::AllocMatrix(int64_t col) {
+  return AllocMatrix(512, col);
+}
+
+VectorStorage ComputeEngine::AllocVector(int64_t size) {
+  return VectorStorage({size});
 }
 
 void ComputeEngine::Copy(MutableVectorView dst, VectorView src) {

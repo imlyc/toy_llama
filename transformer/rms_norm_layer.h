@@ -1,11 +1,10 @@
 #pragma once
 
+#include "compute/tensor_storage.h"
 #include "tensor/tensor_view.h"
-#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class ComputeEngine;
-class Storage;
 
 class RmsNormLayer {
  public:

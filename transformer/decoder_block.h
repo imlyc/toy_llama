@@ -2,15 +2,14 @@
 
 #include <memory>
 
+#include "compute/tensor_storage.h"
 #include "tensor/tensor_view.h"
 #include "transformer/group_query_attn_block.h"
 #include "transformer/rms_norm_layer.h"
 #include "transformer/swiglu_ffn_block.h"
-#include "transformer/tensor_storage.h"
 
 namespace tlm {
 class ComputeEngine;
-class Storage;
 
 class DecoderBlock {
  public:

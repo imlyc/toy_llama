@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "compute/tensor_storage.h"
 #include "tensor/tensor_view.h"
 
 namespace tlm {
@@ -15,7 +16,9 @@ class ComputeEngine {
   ComputeEngine(const ComputeEngine&) = delete;
   ComputeEngine& operator=(const ComputeEngine&) = delete;
 
-  std::unique_ptr<Storage> Alloc(int64_t size);
+  MatrixStorage AllocMatrix(int64_t row, int64_t col);
+  MatrixStorage AllocMatrix(int64_t col);
+  VectorStorage AllocVector(int64_t size);
 
   // Copy data from `src` to `dst`. `dst` is a memory allocated by Alloc.
   void Copy(MutableVectorView dst, VectorView src);

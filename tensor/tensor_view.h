@@ -97,16 +97,12 @@ struct TensorView {
     std::copy_n(other.data, TotalBytes(), data);
   }
 
-  template <typename... Sizes>
-    requires(sizeof...(Sizes) == Rank) &&
-            (std::is_convertible_v<Sizes, int64_t> && ...)
-  static TensorView<sizeof...(Sizes), Mutable> Create(DType dtype,
-                                                      Byte* data,
-                                                      Sizes... sizes) {
+  static TensorView<Rank, Mutable>
+  Create(DType dtype, Byte* data, const std::array<int64_t, Rank>& shape) {
     TensorView<Rank, Mutable> view;
     view.dtype = dtype;
     view.data = data;
-    view.shape = std::array<int64_t, Rank>{static_cast<int64_t>(sizes)...};
+    view.shape = shape;
     view.stride[Rank - 1] = GetDTypeBlockBytes(view.dtype);
     for (int i = Rank - 2; i >= 0; i--) {
       if (i == Rank - 2) {
@@ -118,6 +114,16 @@ struct TensorView {
     }
 
     return view;
+  }
+
+  template <typename... Sizes>
+    requires(sizeof...(Sizes) == Rank) &&
+            (std::is_convertible_v<Sizes, int64_t> && ...)
+  static TensorView<sizeof...(Sizes), Mutable> Create(DType dtype,
+                                                      Byte* data,
+                                                      Sizes... sizes) {
+    std::array<int64_t, Rank> shape{static_cast<int64_t>(sizes)...};
+    return Create(dtype, data, shape);
   }
 };
 

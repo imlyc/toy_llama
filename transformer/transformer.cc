@@ -4,7 +4,6 @@
 
 #include <glog/logging.h>
 
-#include "compute/storage.h"
 #include "model/model.h"
 
 namespace tlm {
@@ -45,8 +44,8 @@ Transformer::Transformer(const Model& model)
     : model_(model),
       embedding_size_(model_.GetTokenEmbeddingLength()),
       token_embeddings_(model_.GetTokenEmbeddings()),
-      embeddings_(compute_engine_, embedding_size_),
-      logits_(compute_engine_, model_.GetVocabSize()),
+      embeddings_(compute_engine_.AllocMatrix(embedding_size_)),
+      logits_(compute_engine_.AllocVector(model_.GetVocabSize())),
       final_rms_norm_(
           compute_engine_,
           {model_.GetOutputNormGamma(), model_.GetLayerNormEpsilon()}) {
@@ -62,7 +61,7 @@ Transformer::~Transformer() = default;
 std::span<const float> Transformer::Prefill(std::span<const Token> tokens) {
   MatrixView block_input;
   int64_t token_counts = 0;
-  const int64_t chunk_size = embeddings_.Matrix().shape[0];
+  const int64_t chunk_size = embeddings_.View().shape[0];
   for (int64_t chunk = 0; chunk < tokens.size(); chunk += chunk_size) {
     token_counts =
         std::min(chunk_size, static_cast<int64_t>(tokens.size()) - chunk);
@@ -77,11 +76,11 @@ std::span<const float> Transformer::Prefill(std::span<const Token> tokens) {
       final_rms_norm_.Forward(block_input.Bottom(1)).At(0);
 
   // Linear layer.
-  compute_engine_.MatMul(logits_.Vector(), token_embeddings_, final_rms_output);
+  compute_engine_.MatMul(logits_.View(), token_embeddings_, final_rms_output);
 
-  compute_engine_.Softmax(logits_.Vector());
+  compute_engine_.Softmax(logits_.View());
 
-  return logits_.Vector().As<const float>();
+  return logits_.View().As<const float>();
 }
 
 std::span<const float> Transformer::Predict(Token token) {
@@ -94,10 +93,10 @@ MatrixView Transformer::LookupTokenEmbeddings(
   for (int i = 0; i < tokens.size(); i++) {
     CHECK_NE(tokens[i], Token::INVALID);
     VectorView embedding = token_embeddings_.At(tokens[i].id);
-    compute_engine_.Copy(embeddings_.Matrix().At(i), embedding);
+    compute_engine_.Copy(embeddings_.View().At(i), embedding);
   }
 
-  return embeddings_.Matrix().Top(tokens.size());
+  return embeddings_.View().Top(tokens.size());
 }
 
 }  // namespace tlm
