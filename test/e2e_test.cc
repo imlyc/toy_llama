@@ -7,13 +7,19 @@
 //   TOY_LLAMA_GOLDEN=<path.txt>       optional. Missing file: record this run.
 //                                     Existing file: compare against it.
 //   TOY_LLAMA_GOLDEN_LONG=<path.txt>  same, for the long-prompt case.
-//   TOY_LLAMA_MIN_PREFILL_SPEEDUP=x   optional, default 1.2. In compare mode,
-//                                     golden_prefill_ms / prefill_ms must be
-//                                     at least this.
+//   TOY_LLAMA_MIN_SPEED_RATIO=x       optional, default 0.8. In compare mode,
+//                                     golden_ms / actual_ms for prefill and for
+//                                     decode must each be at least this, i.e.
+//                                     the build may be at most 20% slower than
+//                                     the golden (run-to-run noise is ~5-7%).
+//                                     Set it above 1 to demand a speedup.
 //
-// Workflow for a change that must not alter inference output but should make
-// prompt processing faster (e.g. batched prefill): record the golden on the
-// commit BEFORE the change, then run again on the commit AFTER it.
+// The checked-in goldens, test/e2e_golden_1b.txt and
+// test/e2e_golden_1b_long.txt, are the current baseline: the output they hold
+// must be reproduced exactly, and prefill/decode must not regress against
+// their timings. After a deliberate speedup, delete and re-record them so the
+// new numbers become the bar. (They were first recorded on the last serial-
+// prefill commit; batched prefill measured 3.7-3.9x against that.)
 //
 // Timing comes from the streaming callback: the gap from SendMessageAsync's
 // start to the first callback is prompt processing (prefill + one sample);
@@ -40,7 +46,7 @@
 namespace tlm {
 namespace {
 
-constexpr double kDefaultMinPrefillSpeedup = 1.2;
+constexpr double kDefaultMinSpeedRatio = 0.8;
 
 // About 100 tokens after the chat template: long enough that prompt
 // processing is many times the cost of one decode step.
@@ -245,23 +251,27 @@ void RunGoldenCase(const std::string& message, const char* golden_env) {
   EXPECT_EQ(golden.generated_token_count, actual.generated_token_count);
   EXPECT_EQ(golden.reply, actual.reply);
 
-  // 2. Prompt processing must be faster than the golden by the required factor.
-  double min_speedup = kDefaultMinPrefillSpeedup;
-  if (const char* s = std::getenv("TOY_LLAMA_MIN_PREFILL_SPEEDUP")) {
-    min_speedup = std::atof(s);
+  // 2. Neither prompt processing nor decode may regress past the allowed
+  //    ratio (golden / actual; below 1 means slower than the golden).
+  double min_ratio = kDefaultMinSpeedRatio;
+  if (const char* s = std::getenv("TOY_LLAMA_MIN_SPEED_RATIO")) {
+    min_ratio = std::atof(s);
   }
-  const double prefill_speedup = golden.prefill_ms / actual.prefill_ms;
+  const double prefill_ratio = golden.prefill_ms / actual.prefill_ms;
   const double decode_ratio =
       golden.decode_ms_per_token / actual.decode_ms_per_token;
-  std::cout << "prefill speedup vs golden: " << prefill_speedup << "x ("
+  std::cout << "prefill speed vs golden: " << prefill_ratio << "x ("
             << golden.prefill_ms << " ms -> " << actual.prefill_ms
             << " ms)\n"
-            << "decode speedup vs golden:  " << decode_ratio << "x ("
+            << "decode speed vs golden:  " << decode_ratio << "x ("
             << golden.decode_ms_per_token << " -> "
             << actual.decode_ms_per_token << " ms/token)\n";
-  EXPECT_GE(prefill_speedup, min_speedup)
-      << "prefill did not get faster: golden " << golden.prefill_ms
-      << " ms, now " << actual.prefill_ms << " ms";
+  EXPECT_GE(prefill_ratio, min_ratio)
+      << "prefill regressed: golden " << golden.prefill_ms << " ms, now "
+      << actual.prefill_ms << " ms";
+  EXPECT_GE(decode_ratio, min_ratio)
+      << "decode regressed: golden " << golden.decode_ms_per_token
+      << " ms/token, now " << actual.decode_ms_per_token << " ms/token";
 }
 
 // Short prompt (~110 tokens): fits in a single prefill chunk.

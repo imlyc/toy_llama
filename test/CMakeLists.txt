@@ -4,6 +4,7 @@ add_executable(toy_llama_test
   tokenizer_test.cc
   gguf_parser_test.cc
   tensor_view_test.cc
+  tensor_storage_test.cc
   compute_engine_test.cc
   transformer_test.cc
 )
@@ -29,8 +30,12 @@ gtest_discover_tests(toy_llama_test DISCOVERY_MODE PRE_TEST)
 # the unit test binary and out of ctest: it needs a model file and an optimized
 # build. Run it explicitly, e.g.
 #   TOY_LLAMA_MODEL=data/models/llama-3.2-1b-instruct-q8_0.gguf \
-#   TOY_LLAMA_GOLDEN=/tmp/toy_llama/e2e_golden_1b.txt \
+#   TOY_LLAMA_GOLDEN=test/e2e_golden_1b.txt \
+#   TOY_LLAMA_GOLDEN_LONG=test/e2e_golden_1b_long.txt \
 #   ./build-release/test/toy_llama_e2e_test
+# The goldens under test/ are the current baseline for output and timing; a
+# missing golden file is re-recorded from the current build, which is how to
+# re-baseline after a deliberate speedup.
 add_executable(toy_llama_e2e_test
   e2e_test.cc
 )
