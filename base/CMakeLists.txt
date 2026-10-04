@@ -4,5 +4,6 @@ add_library(base OBJECT
 )
 
 target_link_libraries(base PRIVATE
-  glog::glog
+  absl::check
+  absl::log
 )

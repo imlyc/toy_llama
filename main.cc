@@ -1,9 +1,12 @@
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
-
-#include <glog/logging.h>
+#include <absl/log/globals.h>
+#include <absl/log/initialize.h>
+#include <absl/log/log.h>
+#include <absl/log/log_sink_registry.h>
 
 #include "chat_engine.h"
 #include "model/model.h"
@@ -12,15 +15,30 @@
 namespace {
 constexpr char kModelPath[] =
     "/Users/imlyc/Work/toy_llama/data/models/llama-3.2-1b-instruct-q8_0.gguf";
+
+class FileLogSink : public absl::LogSink {
+ public:
+  explicit FileLogSink(const std::filesystem::path& path)
+    : out_(path, std::ios::app) {}
+
+  void Send(const absl::LogEntry& entry) override {
+    out_ << entry.text_message_with_prefix_and_newline();
+  }
+
+ private:
+  std::fstream out_;
+};
 }  // namespace
 
 int main(int argc, char** argv) {
   std::filesystem::path log_dir = "/tmp/toy_llama";
   std::filesystem::create_directory(log_dir);
 
-  FLAGS_log_dir = log_dir;
-  FLAGS_minloglevel = 0;
-  google::InitGoogleLogging(argv[0]);
+  absl::SetMinLogLevel(absl::LogSeverityAtLeast::kInfo);
+  absl::InitializeLog();
+
+  static FileLogSink sink(log_dir / "log.txt");
+  absl::AddLogSink(&sink);
 
   LOG(INFO) << "Welcome to Toy Llama.";
 

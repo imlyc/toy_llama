@@ -7,6 +7,6 @@ add_library(transformer OBJECT
 )
 
 target_link_libraries(transformer PRIVATE
+  absl::check
   tensor
-  glog::glog
 )

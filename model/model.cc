@@ -4,7 +4,8 @@
 #include <string>
 #include <string_view>
 
-#include <glog/logging.h>
+#include <absl/log/check.h>
+#include <absl/log/log.h>
 
 #include "base/cast.h"
 #include "gguf/gguf_parser.h"

@@ -1,6 +1,7 @@
 #include "gguf/gguf_parser.h"
 
-#include <glog/logging.h>
+#include <absl/log/check.h>
+#include <absl/log/log.h>
 
 namespace tlm {
 #define RET_CHECK(expr)                                      \

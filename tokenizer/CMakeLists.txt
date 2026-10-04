@@ -4,6 +4,7 @@ add_library(tokenizer OBJECT
 )
 
 target_link_libraries(tokenizer PRIVATE
-  glog::glog
+  absl::check
+  absl::log
   re2::re2
 )

@@ -1,6 +1,6 @@
 #include "tokenizer/chat_template.h"
 
-#include <glog/logging.h>
+#include <absl/log/check.h>
 
 #include "tokenizer/tokenizer.h"
 

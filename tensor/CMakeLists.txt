@@ -4,5 +4,4 @@ add_library(tensor OBJECT
 
 target_link_libraries(tensor PRIVATE
   base
-  glog::glog
 )

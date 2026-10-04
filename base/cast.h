@@ -2,7 +2,7 @@
 
 #include <utility>
 
-#include <glog/logging.h>
+#include <absl/log/check.h>
 
 namespace tlm {
 

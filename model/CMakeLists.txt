@@ -5,7 +5,8 @@ add_library(model OBJECT
 )
 
 target_link_libraries(model PRIVATE
+  absl::check
+  absl::log
   base
   gguf
-  glog::glog
 )

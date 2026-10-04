@@ -3,5 +3,6 @@ add_library(gguf OBJECT
 )
 
 target_link_libraries(gguf PRIVATE
-  glog::glog
+  absl::check
+  absl::log
 )

@@ -7,8 +7,6 @@
 #include <variant>
 #include <vector>
 
-#include <glog/logging.h>
-
 #include "gguf/gguf_type.h"
 
 namespace tlm {

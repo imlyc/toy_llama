@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include <glog/logging.h>
+#include <absl/log/check.h>
 
 #include "model/model.h"
 

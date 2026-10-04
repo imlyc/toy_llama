@@ -3,5 +3,5 @@ add_library(sampler OBJECT
 )
 
 target_link_libraries(sampler PRIVATE
-  glog::glog
+  absl::check
 )

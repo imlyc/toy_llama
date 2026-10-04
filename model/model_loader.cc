@@ -1,6 +1,6 @@
 #include "model/model_loader.h"
 
-#include <glog/logging.h>
+#include <absl/log/log.h>
 
 #include "base/mmap_file.h"
 #include "gguf/gguf_parser.h"

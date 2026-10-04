@@ -3,7 +3,8 @@ add_library(compute OBJECT
 )
 
 target_link_libraries(compute PRIVATE
+  absl::check
+  absl::log
   eigen
   tensor
-  glog::glog
 )

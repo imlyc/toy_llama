@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <glog/logging.h>
+#include <absl/log/log.h>
 
 #include "base/scoped_fd.h"
 

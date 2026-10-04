@@ -1,7 +1,5 @@
 #include "chat_engine.h"
 
-#include <glog/logging.h>
-
 namespace tlm {
 
 ChatEngine::ChatEngine(const Model& model)
