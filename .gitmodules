@@ -6,3 +6,6 @@
 	path = third_party/eigen
 	url = https://gitlab.com/libeigen/eigen.git
 	shallow = true
+[submodule "third_party/abseil-cpp"]
+	path = third_party/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git

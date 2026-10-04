@@ -56,12 +56,6 @@ class GgufParser {
     return std::get<T>(metadata_.at(key));
   }
 
-  template <>
-  const std::vector<std::string_view>& GetMetadata(std::string_view key) const {
-    const Array& array = GetMetadata<Array>(key);
-    return array.strings;
-  }
-
   const TensorInfo& GetTensorInfo(std::string_view key) const;
   const std::byte* GetTensorData(const TensorInfo& info) const;
 
@@ -94,5 +88,13 @@ class GgufParser {
   std::unordered_map<std::string_view, Value> metadata_;
   std::unordered_map<std::string_view, TensorInfo> tensor_infos_;
 };
+
+template <>
+inline const std::vector<std::string_view>&
+GgufParser::GetMetadata<std::vector<std::string_view>>(
+    std::string_view key) const {
+  const Array& array = GetMetadata<Array>(key);
+  return array.strings;
+}
 
 }  // namespace tlm

@@ -19,7 +19,7 @@ struct DTypeTrait {
 };
 
 struct __attribute__((packed)) BlockQ8_0 {
-  Float16 scale = 1.;
+  Float16 scale = static_cast<Float16>(1);
   int8_t data[32] = {0};
 };
 static_assert(sizeof(BlockQ8_0) ==
