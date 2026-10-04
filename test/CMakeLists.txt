@@ -1,6 +1,7 @@
 find_package(GTest REQUIRED)
 
 add_executable(toy_llama_test
+  test_main.cc
   tokenizer_test.cc
   gguf_parser_test.cc
   tensor_view_test.cc
@@ -19,8 +20,10 @@ target_link_libraries(toy_llama_test PRIVATE
   tensor
   tokenizer
   transformer
-  glog::glog
-  GTest::gtest_main
+  absl::check
+  absl::log
+  absl::log_initialize
+  GTest::gtest
 )
 
 include(GoogleTest)
@@ -37,6 +40,7 @@ gtest_discover_tests(toy_llama_test DISCOVERY_MODE PRE_TEST)
 # missing golden file is re-recorded from the current build, which is how to
 # re-baseline after a deliberate speedup.
 add_executable(toy_llama_e2e_test
+  test_main.cc
   e2e_test.cc
 )
 
@@ -52,6 +56,8 @@ target_link_libraries(toy_llama_e2e_test PRIVATE
   tokenizer
   transformer
   libtlm
-  glog::glog
-  GTest::gtest_main
+  absl::check
+  absl::log
+  absl::log_initialize
+  GTest::gtest
 )
