@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # init git submodules
 git submodule update --init --recursive --depth 1
 
