@@ -1,5 +1,3 @@
-find_package(GTest REQUIRED)
-
 add_executable(toy_llama_test
   test_main.cc
   tokenizer_test.cc

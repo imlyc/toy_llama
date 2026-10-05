@@ -62,4 +62,6 @@ target_link_libraries(toy_llama PRIVATE
 )
 
 enable_testing()
+set(BUILD_GMOCK OFF)
+add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
 add_subdirectory(test)
