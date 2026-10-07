@@ -1,4 +1,3 @@
-build/
-build-cuda/
-build-release/
+build*/
 data/models/
+.claude/
